@@ -16,7 +16,11 @@ _ENV_FILE = _REPO_ROOT / ".env"
 
 
 class Settings(BaseSettings):
-    """Runtime configuration from the process environment and the repo-root ``.env``."""
+    """Runtime configuration from the process environment and the repo-root ``.env``.
+
+    Provider clients are created by callers, not while settings load. Missing
+    API keys stay empty so ``/health`` can run.
+    """
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
@@ -26,8 +30,16 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr | None = Field(default=None, repr=False)
+    openai_model: str = Field(default="gpt-5-nano", min_length=1)
+    openai_max_output_tokens: int = Field(default=256, ge=1)
+    openai_timeout_seconds: float = Field(default=30.0, gt=0)
     anthropic_api_key: SecretStr | None = Field(default=None, repr=False)
+    anthropic_model: str = Field(default="claude-sonnet-4-6", min_length=1)
+    anthropic_max_tokens: int = Field(default=1024, ge=1)
+    anthropic_timeout_seconds: float = Field(default=30.0, gt=0)
     ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = Field(default="llama3.2", min_length=1)
+    ollama_timeout_seconds: float = Field(default=60.0, gt=0)
     low_complexity_threshold: float = Field(default=0.30, ge=0, le=1)
     high_complexity_threshold: float = Field(default=0.70, ge=0, le=1)
     min_quality_score: float = Field(default=0.75, ge=0, le=1)

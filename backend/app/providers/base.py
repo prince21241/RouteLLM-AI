@@ -1,7 +1,7 @@
 """Abstract provider contract.
 
-Concrete clients are added in a later phase. Implementations return token
-counts and latency, and leave ``estimated_cost`` empty.
+Concrete clients return token counts and latency, and leave ``estimated_cost``
+empty. Pricing is filled in later.
 """
 
 from abc import ABC, abstractmethod

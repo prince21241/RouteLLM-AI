@@ -9,8 +9,16 @@ from app.main import create_app
 
 def test_defaults(settings: Settings) -> None:
     assert settings.openai_api_key is None
+    assert settings.openai_model == "gpt-5-nano"
+    assert settings.openai_max_output_tokens == 256
+    assert settings.openai_timeout_seconds == 30.0
     assert settings.anthropic_api_key is None
+    assert settings.anthropic_model == "claude-sonnet-4-6"
+    assert settings.anthropic_max_tokens == 1024
+    assert settings.anthropic_timeout_seconds == 30.0
     assert settings.ollama_base_url == "http://localhost:11434"
+    assert settings.ollama_model == "llama3.2"
+    assert settings.ollama_timeout_seconds == 60.0
     assert settings.low_complexity_threshold == 0.30
     assert settings.high_complexity_threshold == 0.70
     assert settings.min_quality_score == 0.75
@@ -97,6 +105,22 @@ def test_threshold_boundaries() -> None:
     ],
 )
 def test_invalid_settings(overrides: dict[str, float | int]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **overrides)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"openai_max_output_tokens": 0},
+        {"openai_timeout_seconds": 0},
+        {"anthropic_max_tokens": 0},
+        {"anthropic_timeout_seconds": -1},
+        {"ollama_model": ""},
+        {"ollama_timeout_seconds": 0},
+    ],
+)
+def test_invalid_provider_settings(overrides: dict[str, float | int | str]) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **overrides)
 

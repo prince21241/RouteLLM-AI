@@ -21,7 +21,8 @@ def create_app(
     """Build the API.
 
     Defaults are enough to serve ``/health`` with no API keys, database, or
-    running Ollama process. Pass ``settings`` or ``registry`` to override them.
+    running Ollama process. Provider clients are not constructed here. Pass
+    ``settings`` or ``registry`` to override them.
     """
     app = FastAPI(title="RouteLLM AI", version=__version__)
     app.state.settings = get_settings() if settings is None else settings
