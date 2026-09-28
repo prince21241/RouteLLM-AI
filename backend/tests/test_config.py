@@ -3,6 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
+from app.api.schemas import QualityTier
 from app.config import Settings, get_settings
 from app.main import create_app
 
@@ -12,17 +13,27 @@ def test_defaults(settings: Settings) -> None:
     assert settings.openai_model == "gpt-5-nano"
     assert settings.openai_max_output_tokens == 256
     assert settings.openai_timeout_seconds == 30.0
+    assert settings.openai_routing_enabled is True
+    assert settings.openai_quality_tier == QualityTier.LOW
     assert settings.anthropic_api_key is None
     assert settings.anthropic_model == "claude-sonnet-4-6"
     assert settings.anthropic_max_tokens == 1024
     assert settings.anthropic_timeout_seconds == 30.0
+    assert settings.anthropic_routing_enabled is False
+    assert settings.anthropic_quality_tier == QualityTier.HIGH
     assert settings.ollama_base_url == "http://localhost:11434"
     assert settings.ollama_model == "llama3.2"
     assert settings.ollama_timeout_seconds == 60.0
+    assert settings.ollama_routing_enabled is False
+    assert settings.ollama_quality_tier == QualityTier.LOW
+    assert settings.routing_preference == ""
+    assert settings.max_input_characters == 8000
     assert settings.low_complexity_threshold == 0.30
     assert settings.high_complexity_threshold == 0.70
     assert settings.min_quality_score == 0.75
     assert settings.max_model_attempts == 3
+    assert settings.database_url is None
+    assert settings.premium_baseline_model == "claude-sonnet-4-6"
 
 
 def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,6 +79,16 @@ def test_secrets_are_redacted() -> None:
     assert "placeholder-anthropic-key" not in rendered
     assert "placeholder-openai-key" not in dumped
     assert "placeholder-anthropic-key" not in dumped
+
+    with_database = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://routellm:secret-pass@localhost/routellm",
+    )
+    rendered_database = repr(with_database)
+    dumped_database = str(with_database.model_dump())
+    assert "secret-pass" not in rendered_database
+    assert "secret-pass" not in dumped_database
+    assert with_database.database_url is not None
     assert settings.openai_api_key is not None
     assert settings.openai_api_key.get_secret_value() == "placeholder-openai-key"
     assert settings.anthropic_api_key is not None
@@ -118,6 +139,7 @@ def test_invalid_settings(overrides: dict[str, float | int]) -> None:
         {"anthropic_timeout_seconds": -1},
         {"ollama_model": ""},
         {"ollama_timeout_seconds": 0},
+        {"max_input_characters": 0},
     ],
 )
 def test_invalid_provider_settings(overrides: dict[str, float | int | str]) -> None:

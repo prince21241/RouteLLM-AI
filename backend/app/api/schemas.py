@@ -43,10 +43,31 @@ class ModelConfig(BaseModel):
     local: bool
 
 
+class ReportedUsage(BaseModel):
+    """Token counts reported by a provider.
+
+    Missing optional counts stay ``None``. They are not treated as zero.
+    ``reasoning_tokens`` are informational. For OpenAI they are already
+    included in ``output_tokens`` and must not be added again.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    cache_write_input_tokens: int | None = Field(default=None, ge=0)
+    cache_read_input_tokens: int | None = Field(default=None, ge=0)
+    cache_write_5m_tokens: int | None = Field(default=None, ge=0)
+    cache_write_1h_tokens: int | None = Field(default=None, ge=0)
+    reasoning_tokens: int | None = Field(default=None, ge=0)
+
+
 class LLMResponse(BaseModel):
     """Completion returned by a provider.
 
-    ``estimated_cost`` stays empty until shared pricing fills it in.
+    Providers do not calculate cost. Optional cache counts are preserved
+    when the provider reports them so pricing can avoid double-counting.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -58,3 +79,9 @@ class LLMResponse(BaseModel):
     output_tokens: int = Field(ge=0)
     latency_ms: float = Field(ge=0)
     estimated_cost: Annotated[Decimal, Field(ge=0)] | None = None
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    cache_write_input_tokens: int | None = Field(default=None, ge=0)
+    cache_read_input_tokens: int | None = Field(default=None, ge=0)
+    cache_write_5m_tokens: int | None = Field(default=None, ge=0)
+    cache_write_1h_tokens: int | None = Field(default=None, ge=0)
+    reasoning_tokens: int | None = Field(default=None, ge=0)

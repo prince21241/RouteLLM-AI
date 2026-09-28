@@ -30,4 +30,12 @@ class ProviderUpstreamError(ProviderError):
 
 
 class ProviderResponseError(ProviderError):
-    """The provider response was malformed, empty, or incomplete."""
+    """The provider response was malformed, empty, or incomplete.
+
+    ``usage`` is set when the failed payload still reported token counts.
+    It stays ``None`` when those counts were absent.
+    """
+
+    def __init__(self, message: str, *, usage: object | None = None) -> None:
+        super().__init__(message)
+        self.usage = usage

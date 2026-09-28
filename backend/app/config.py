@@ -11,6 +11,8 @@ from typing import Self
 from pydantic import Field, SecretStr, field_serializer, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.api.schemas import QualityTier
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ENV_FILE = _REPO_ROOT / ".env"
 
@@ -33,17 +35,27 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-5-nano", min_length=1)
     openai_max_output_tokens: int = Field(default=256, ge=1)
     openai_timeout_seconds: float = Field(default=30.0, gt=0)
+    openai_routing_enabled: bool = True
+    openai_quality_tier: QualityTier = QualityTier.LOW
     anthropic_api_key: SecretStr | None = Field(default=None, repr=False)
     anthropic_model: str = Field(default="claude-sonnet-4-6", min_length=1)
     anthropic_max_tokens: int = Field(default=1024, ge=1)
     anthropic_timeout_seconds: float = Field(default=30.0, gt=0)
+    anthropic_routing_enabled: bool = False
+    anthropic_quality_tier: QualityTier = QualityTier.HIGH
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = Field(default="llama3.2", min_length=1)
     ollama_timeout_seconds: float = Field(default=60.0, gt=0)
+    ollama_routing_enabled: bool = False
+    ollama_quality_tier: QualityTier = QualityTier.LOW
+    routing_preference: str = ""
+    max_input_characters: int = Field(default=8000, ge=1)
     low_complexity_threshold: float = Field(default=0.30, ge=0, le=1)
     high_complexity_threshold: float = Field(default=0.70, ge=0, le=1)
     min_quality_score: float = Field(default=0.75, ge=0, le=1)
     max_model_attempts: int = Field(default=3, ge=1)
+    database_url: str | None = Field(default=None, repr=False)
+    premium_baseline_model: str = "claude-sonnet-4-6"
 
     @field_validator("openai_api_key", "anthropic_api_key", mode="before")
     @classmethod
@@ -52,11 +64,31 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def blank_database_url_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+    @field_validator("premium_baseline_model", mode="before")
+    @classmethod
+    def strip_baseline_model(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
     @field_serializer("openai_api_key", "anthropic_api_key")
     def redact_api_key(self, value: SecretStr | None) -> str | None:
         if value is None:
             return None
         return "**********"
+
+    @field_serializer("database_url")
+    def redact_database_url(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return "[redacted]"
 
     @model_validator(mode="after")
     def thresholds_are_ordered(self) -> Self:

@@ -211,6 +211,8 @@ def test_openai_normalizes_text_usage_and_latency(
         assert response.content == "Connection successful"
         assert response.input_tokens == 12
         assert response.output_tokens == 4
+        assert response.reasoning_tokens == 3
+        assert response.cached_input_tokens is None
         assert response.latency_ms == 250
         assert response.estimated_cost is None
 
@@ -386,6 +388,8 @@ def test_anthropic_normalizes_text_usage_and_latency(
         assert "hidden reasoning" not in first.content
         assert first.input_tokens == 25
         assert first.output_tokens == 15
+        assert first.cache_write_input_tokens == 5
+        assert first.cache_read_input_tokens == 7
         assert first.latency_ms == 500
         assert first.estimated_cost is None
 

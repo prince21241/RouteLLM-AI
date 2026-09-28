@@ -11,12 +11,13 @@ from typing import Self
 import httpx
 from pydantic import SecretStr, ValidationError
 
-from app.api.schemas import LLMResponse, Provider
+from app.api.schemas import LLMResponse, Provider, ReportedUsage
 from app.config import Settings
 from app.providers.base import LLMProvider
 from app.providers.client import (
     ManagedAsyncClient,
     ProviderSession,
+    optional_token_count,
     reported_model,
     require_configured_text,
     require_positive_int,
@@ -135,23 +136,20 @@ def _normalize(
 ) -> LLMResponse:
     _require_complete_stop(payload)
     content = _text_blocks(payload.get("content"))
+    usage = _reported_usage(payload)
     try:
         return LLMResponse(
             provider=Provider.ANTHROPIC,
             model=reported_model(payload, fallback_model),
             content=content,
-            input_tokens=require_token_count(
-                payload.get("usage"),
-                "input_tokens",
-                "Anthropic",
-            ),
-            output_tokens=require_token_count(
-                payload.get("usage"),
-                "output_tokens",
-                "Anthropic",
-            ),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
             latency_ms=latency_ms,
             estimated_cost=None,
+            cache_write_input_tokens=usage.cache_write_input_tokens,
+            cache_read_input_tokens=usage.cache_read_input_tokens,
+            cache_write_5m_tokens=usage.cache_write_5m_tokens,
+            cache_write_1h_tokens=usage.cache_write_1h_tokens,
         )
     except ValidationError:
         raise ProviderResponseError("Anthropic response could not be normalized") from None
@@ -162,11 +160,53 @@ def _require_complete_stop(payload: dict[str, object]) -> None:
     if safe_token(stop_reason) in _COMPLETE_STOPS:
         return
     label = safe_token(stop_reason)
+    usage = _usage_or_none(payload)
     if label in _INCOMPLETE_STOPS:
-        raise ProviderResponseError(f"Anthropic response was incomplete ({label})")
+        raise ProviderResponseError(
+            f"Anthropic response was incomplete ({label})",
+            usage=usage,
+        )
     raise ProviderResponseError(
-        f"Anthropic response was not completed ({label or 'unexpected'})"
+        f"Anthropic response was not completed ({label or 'unexpected'})",
+        usage=usage,
     )
+
+
+def _reported_usage(payload: dict[str, object]) -> ReportedUsage:
+    """Read Anthropic usage. Cache counts are not included in ``input_tokens``."""
+    usage = payload.get("usage")
+    creation = usage.get("cache_creation") if isinstance(usage, dict) else None
+    return ReportedUsage(
+        input_tokens=require_token_count(usage, "input_tokens", "Anthropic"),
+        output_tokens=require_token_count(usage, "output_tokens", "Anthropic"),
+        cache_write_input_tokens=optional_token_count(
+            usage,
+            "cache_creation_input_tokens",
+            "Anthropic",
+        ),
+        cache_read_input_tokens=optional_token_count(
+            usage,
+            "cache_read_input_tokens",
+            "Anthropic",
+        ),
+        cache_write_5m_tokens=optional_token_count(
+            creation,
+            "ephemeral_5m_input_tokens",
+            "Anthropic",
+        ),
+        cache_write_1h_tokens=optional_token_count(
+            creation,
+            "ephemeral_1h_input_tokens",
+            "Anthropic",
+        ),
+    )
+
+
+def _usage_or_none(payload: dict[str, object]) -> ReportedUsage | None:
+    try:
+        return _reported_usage(payload)
+    except ProviderResponseError:
+        return None
 
 
 def _text_blocks(content: object) -> str:

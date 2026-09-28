@@ -10,12 +10,13 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import ValidationError
 
-from app.api.schemas import LLMResponse, Provider
+from app.api.schemas import LLMResponse, Provider, ReportedUsage
 from app.config import Settings
 from app.providers.base import LLMProvider
 from app.providers.client import (
     ManagedAsyncClient,
     ProviderSession,
+    optional_token_count,
     reported_model,
     require_configured_text,
     require_token_count,
@@ -115,27 +116,44 @@ def _normalize(
     latency_ms: float,
 ) -> LLMResponse:
     content = _message_content(payload)
+    usage = _reported_usage(payload)
     try:
         return LLMResponse(
             provider=Provider.OLLAMA,
             model=reported_model(payload, fallback_model),
             content=content,
-            input_tokens=require_token_count(payload, "prompt_eval_count", "Ollama"),
-            output_tokens=require_token_count(payload, "eval_count", "Ollama"),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
             latency_ms=latency_ms,
             estimated_cost=None,
+            cached_input_tokens=usage.cached_input_tokens,
         )
     except ValidationError:
         raise ProviderResponseError("Ollama response could not be normalized") from None
 
 
+def _reported_usage(payload: dict[str, object]) -> ReportedUsage:
+    """Read Ollama counts. Cached prompt tokens are not added to the input total."""
+    return ReportedUsage(
+        input_tokens=require_token_count(payload, "prompt_eval_count", "Ollama"),
+        output_tokens=require_token_count(payload, "eval_count", "Ollama"),
+        cached_input_tokens=optional_token_count(payload, "prompt_eval_cached_count", "Ollama"),
+    )
+
+
 def _message_content(payload: dict[str, object]) -> str:
     if payload.get("done") is not True:
-        raise ProviderResponseError("Ollama response was incomplete")
+        raise ProviderResponseError(
+            "Ollama response was incomplete",
+            usage=_usage_or_none(payload),
+        )
     reason = payload.get("done_reason")
     if reason is not None and reason != "stop":
         label = safe_token(reason) or "unexpected"
-        raise ProviderResponseError(f"Ollama response was incomplete ({label})")
+        raise ProviderResponseError(
+            f"Ollama response was incomplete ({label})",
+            usage=_usage_or_none(payload),
+        )
     message = payload.get("message")
     if not isinstance(message, dict):
         raise ProviderResponseError("Ollama response did not include text")
@@ -143,3 +161,10 @@ def _message_content(payload: dict[str, object]) -> str:
     if not isinstance(content, str) or content.strip() == "":
         raise ProviderResponseError("Ollama response did not include text")
     return content
+
+
+def _usage_or_none(payload: dict[str, object]) -> ReportedUsage | None:
+    try:
+        return _reported_usage(payload)
+    except ProviderResponseError:
+        return None

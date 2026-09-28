@@ -1,0 +1,22 @@
+# Local PostgreSQL for development. The API runs on the host, not in this file.
+# Credentials are development defaults. Override them in the shell or a gitignored
+# .env before you compose up. This file does not delete an existing volume.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-routellm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-routellm}
+      POSTGRES_DB: ${POSTGRES_DB:-routellm}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - routellm_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  routellm_postgres:

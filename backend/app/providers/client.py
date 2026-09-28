@@ -64,6 +64,19 @@ def require_token_count(usage: object, field: str, provider_name: str) -> int:
     return value
 
 
+def optional_token_count(usage: object, field: str, provider_name: str) -> int | None:
+    """Read an optional token count.
+
+    A missing field stays ``None``. A present but invalid value is an error.
+    """
+    if not isinstance(usage, dict) or field not in usage or usage[field] is None:
+        return None
+    value = usage[field]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ProviderResponseError(f"{provider_name} response included invalid {field}")
+    return value
+
+
 def safe_token(value: object) -> str | None:
     """Return a short status or error code, never a free-form upstream message."""
     if isinstance(value, str) and _SAFE_TOKEN.fullmatch(value):

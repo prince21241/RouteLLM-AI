@@ -12,12 +12,13 @@ from typing import Self
 import httpx
 from pydantic import SecretStr, ValidationError
 
-from app.api.schemas import LLMResponse, Provider
+from app.api.schemas import LLMResponse, Provider, ReportedUsage
 from app.config import Settings
 from app.providers.base import LLMProvider
 from app.providers.client import (
     ManagedAsyncClient,
     ProviderSession,
+    optional_token_count,
     reported_model,
     require_configured_text,
     require_positive_int,
@@ -132,19 +133,19 @@ def _normalize(
 ) -> LLMResponse:
     _require_completed(payload)
     content = _message_text(payload)
+    usage = _reported_usage(payload)
     try:
         return LLMResponse(
             provider=Provider.OPENAI,
             model=reported_model(payload, fallback_model),
             content=content,
-            input_tokens=require_token_count(payload.get("usage"), "input_tokens", "OpenAI"),
-            output_tokens=require_token_count(
-                payload.get("usage"),
-                "output_tokens",
-                "OpenAI",
-            ),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
             latency_ms=latency_ms,
             estimated_cost=None,
+            cached_input_tokens=usage.cached_input_tokens,
+            cache_write_input_tokens=usage.cache_write_input_tokens,
+            reasoning_tokens=usage.reasoning_tokens,
         )
     except ValidationError:
         raise ProviderResponseError("OpenAI response could not be normalized") from None
@@ -157,13 +158,42 @@ def _require_completed(payload: dict[str, object]) -> None:
     if status == "incomplete":
         reason = _incomplete_reason(payload)
         detail = f" ({reason})" if reason is not None else ""
-        raise ProviderResponseError(f"OpenAI response was incomplete{detail}")
+        raise ProviderResponseError(
+            f"OpenAI response was incomplete{detail}",
+            usage=_usage_or_none(payload),
+        )
     if status == "failed":
         code = _failure_code(payload)
         detail = f" ({code})" if code is not None else ""
-        raise ProviderResponseError(f"OpenAI response failed{detail}")
+        raise ProviderResponseError(
+            f"OpenAI response failed{detail}",
+            usage=_usage_or_none(payload),
+        )
     label = safe_token(status) or "unexpected"
     raise ProviderResponseError(f"OpenAI response was not completed ({label})")
+
+
+def _reported_usage(payload: dict[str, object]) -> ReportedUsage:
+    """Read OpenAI usage. Cached tokens are a subset of ``input_tokens``."""
+    usage = payload.get("usage")
+    input_tokens = require_token_count(usage, "input_tokens", "OpenAI")
+    output_tokens = require_token_count(usage, "output_tokens", "OpenAI")
+    details = usage.get("input_tokens_details") if isinstance(usage, dict) else None
+    output_details = usage.get("output_tokens_details") if isinstance(usage, dict) else None
+    return ReportedUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cached_input_tokens=optional_token_count(details, "cached_tokens", "OpenAI"),
+        cache_write_input_tokens=optional_token_count(details, "cache_write_tokens", "OpenAI"),
+        reasoning_tokens=optional_token_count(output_details, "reasoning_tokens", "OpenAI"),
+    )
+
+
+def _usage_or_none(payload: dict[str, object]) -> ReportedUsage | None:
+    try:
+        return _reported_usage(payload)
+    except ProviderResponseError:
+        return None
 
 
 def _incomplete_reason(payload: dict[str, object]) -> str | None:
