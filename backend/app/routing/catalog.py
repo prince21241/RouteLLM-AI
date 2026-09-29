@@ -25,7 +25,8 @@ class CatalogConfigurationError(ValueError):
         self.model_id = model_id
         super().__init__(
             "No verified catalog metadata for model id "
-            f"{model_id!r}. Documented ids are gpt-5-nano, claude-sonnet-4-6, and llama3.2."
+            f"{model_id!r}. Documented ids are gpt-5-nano, claude-sonnet-4-6, "
+            "llama3.2, and gemma4:31b."
         )
 
 
@@ -56,6 +57,11 @@ class VerifiedModelMetadata:
     Ollama ``llama3.2``: 131,072-token context on the library model
     (https://ollama.com/library/llama3.2). The provider API price is 0.
     That zero does not include hardware or electricity.
+
+    Ollama Cloud ``gemma4:31b``: 262,144-token context
+    (https://ollama.com/library/gemma4). Direct cloud requests use this name.
+    Ollama Cloud does not publish a per-token list price, so this entry is
+    not used to calculate a dollar cost.
     """
 
     model_name: str
@@ -67,6 +73,7 @@ class VerifiedModelMetadata:
     price_source_url: str
     price_verified_on: str
     api_cost_note: str
+    list_price_published: bool = True
     cached_input_per_million: Decimal | None = None
     cache_read_per_million: Decimal | None = None
     cache_write_5m_per_million: Decimal | None = None
@@ -121,6 +128,21 @@ _VERIFIED: dict[str, VerifiedModelMetadata] = {
             "Provider API cost is zero. Hardware and electricity are excluded. "
             "Cached prompt tokens are not added on top of prompt_eval_count."
         ),
+    ),
+    "gemma4:31b": VerifiedModelMetadata(
+        model_name="Gemma 4 31B",
+        provider=Provider.OLLAMA,
+        context_window=262_144,
+        input_cost_per_million_tokens=Decimal("0"),
+        output_cost_per_million_tokens=Decimal("0"),
+        local=False,
+        price_source_url="https://ollama.com/library/gemma4",
+        price_verified_on="2026-09-29",
+        api_cost_note=(
+            "Ollama Cloud does not publish a per-token list price. "
+            "The zero rates on this entry are not a charge and are not used for cost."
+        ),
+        list_price_published=False,
     ),
 }
 

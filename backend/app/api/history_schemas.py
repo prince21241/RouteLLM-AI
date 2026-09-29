@@ -57,6 +57,8 @@ class AttemptResponse(BaseModel):
     error_message: str | None
     pricing_snapshot: dict[str, object] | None
     created_at: datetime
+    purpose: str | None = None
+    error_category: str | None = None
 
 
 class RequestDetailResponse(BaseModel):
@@ -96,6 +98,10 @@ class RequestDetailResponse(BaseModel):
     final_model: str | None = None
     returned_attempt: int | None = None
     evaluations: list["EvaluationResponse"] = Field(default_factory=list)
+    fallback_used: bool | None = None
+    fallback_reason: str | None = None
+    fallback_skips: list[dict[str, str]] = Field(default_factory=list)
+    final_provider: str | None = None
 
 
 class EvaluationResponse(BaseModel):

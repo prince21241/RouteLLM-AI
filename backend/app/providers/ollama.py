@@ -1,6 +1,8 @@
 """Ollama chat client.
 
-Calls ``POST /api/chat`` with streaming disabled. Input tokens come from
+Calls ``POST /api/chat`` with streaming disabled. A local server gets no
+credential. When an API key is configured, it is sent as a bearer token.
+Input tokens come from
 ``prompt_eval_count`` and output tokens from ``eval_count``.
 """
 
@@ -8,7 +10,7 @@ from typing import Self
 from urllib.parse import urlsplit
 
 import httpx
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.api.schemas import LLMResponse, Provider, ReportedUsage
 from app.config import Settings
@@ -38,11 +40,13 @@ class OllamaProvider(ProviderSession, LLMProvider):
         base_url: str,
         model: str = DEFAULT_MODEL,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        api_key: str | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         root = _http_base_url(base_url)
         self._model = require_configured_text(model, "OLLAMA_MODEL")
         self._url = f"{root}{_CHAT_PATH}"
+        self._api_key = _optional_api_key(api_key)
         self._http = ManagedAsyncClient(
             client=client,
             timeout_seconds=timeout_seconds,
@@ -65,6 +69,9 @@ class OllamaProvider(ProviderSession, LLMProvider):
             base_url=settings.ollama_base_url,
             model=settings.ollama_model,
             timeout_seconds=settings.ollama_timeout_seconds,
+            api_key=None
+            if settings.ollama_api_key is None
+            else settings.ollama_api_key.get_secret_value(),
             client=client,
         )
 
@@ -79,11 +86,23 @@ class OllamaProvider(ProviderSession, LLMProvider):
         """Generate text with streaming disabled. There are no retries."""
         payload, latency_ms = await self._http.post_json(
             self._url,
-            headers={},
+            headers=_authorization(self._api_key),
             payload=_request_body(prompt, system_prompt, model=self._model),
             provider_name="Ollama",
         )
         return _normalize(payload, fallback_model=self._model, latency_ms=latency_ms)
+
+
+def _optional_api_key(api_key: str | None) -> SecretStr | None:
+    if api_key is None or api_key.strip() == "":
+        return None
+    return SecretStr(api_key.strip())
+
+
+def _authorization(api_key: SecretStr | None) -> dict[str, str]:
+    if api_key is None:
+        return {}
+    return {"Authorization": f"Bearer {api_key.get_secret_value()}"}
 
 
 def _http_base_url(base_url: str) -> str:

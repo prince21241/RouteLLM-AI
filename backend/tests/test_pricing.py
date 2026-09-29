@@ -241,3 +241,7 @@ def test_verified_prices_record_source_and_date() -> None:
     assert anthropic.cache_write_1h_per_million == Decimal("6")
     assert anthropic.price_source_url == "https://platform.claude.com/docs/en/about-claude/pricing"
     assert money_to_api(Decimal("0.0500")) == "0.05"
+
+
+def test_ollama_cloud_model_has_no_published_token_price() -> None:
+    assert lookup_prices("gemma4:31b") is None

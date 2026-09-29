@@ -39,3 +39,21 @@ class ProviderResponseError(ProviderError):
     def __init__(self, message: str, *, usage: object | None = None) -> None:
         super().__init__(message)
         self.usage = usage
+
+
+class ProviderSafetyError(ProviderResponseError):
+    """The provider refused the request for a safety policy.
+
+    This is not a transport failure. Fallback does not retry it.
+    """
+
+
+class ProviderFallbackExhaustedError(ProviderUpstreamError):
+    """Every eligible provider attempt failed.
+
+    The message is a fixed summary. It does not include credentials or
+    upstream response bodies.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("All configured providers failed")

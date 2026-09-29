@@ -6,6 +6,14 @@ from app.config import Settings
 from app.main import create_app
 
 
+def test_home_page_is_served(client: TestClient) -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert 'id="chat-form"' in response.text
+
+
 def test_health(client: TestClient) -> None:
     response = client.get("/health")
 

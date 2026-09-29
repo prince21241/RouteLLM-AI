@@ -8,7 +8,7 @@ Phase 3 adds a rule-based complexity heuristic, deterministic model selection, a
 
 Phase 4 adds a pricing service, PostgreSQL persistence, request history, and a same-token-volume savings estimate.
 
-Phase 5 adds a versioned evaluation dataset, an offline or paid baseline runner, and optional quality checks. Quality checking and escalation are off by default, so a normal chat still makes one provider call. When both are enabled, a failed check may call one stronger model. There is no provider retry and no provider fallback. Dashboard endpoints, the frontend, and ML routing are later phases.
+Phase 5 adds a versioned evaluation dataset, an offline or paid baseline runner, and optional quality checks. Phase 6 adds optional provider fallback. Phase 7 adds a local observability dashboard over stored chat history. The browser client is served by the API at `/`, and the dashboard is at `/dashboard`. Quality checking, escalation, and fallback are off by default, so a normal chat still makes one provider call. When quality checking and escalation are enabled, a failed check may call one stronger model. When fallback is enabled, a timeout, connection failure, rate limit, or transient server error may call one configured model on another provider. There is no provider retry. ML routing is a later phase.
 
 The API still starts and serves `/health` when provider credentials and `DATABASE_URL` are missing. A provider reports missing configuration only when that provider is used. If the first generation fails, the request stops. The router does not call another provider unless escalation is enabled and the initial answer fails a quality check. `/health` does not touch the database. `/ready` does.
 
@@ -62,7 +62,7 @@ Uses the Responses API at `https://api.openai.com/v1/responses`.
 | --- | --- | --- |
 | `OPENAI_API_KEY` | unset | Bearer credential. Required only when `OpenAIProvider` is constructed. |
 | `OPENAI_MODEL` | `gpt-5-nano` | Model id sent on each request. |
-| `OPENAI_MAX_OUTPUT_TOKENS` | `256` | Upper bound for visible output and reasoning tokens. |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `2048` | Upper bound for visible output and reasoning tokens. |
 | `OPENAI_TIMEOUT_SECONDS` | `30` | Finite HTTP timeout. |
 
 The OpenAI client always sends `reasoning.effort` of `minimal`. That option is specific to this provider. A system prompt is sent as `instructions`. The user prompt is the string `input`. Text is read from message `output_text` items, including when a reasoning item comes first. Refusal text on a completed message is returned as content.
@@ -82,11 +82,12 @@ A system prompt is sent as the top-level `system` string. Thinking blocks are ig
 
 ### Ollama
 
-Uses `POST {OLLAMA_BASE_URL}/api/chat` with `stream` set to `false`. No API key is sent.
+Uses `POST {OLLAMA_BASE_URL}/api/chat` with `stream` set to `false`. A local server receives no credential. When `OLLAMA_API_KEY` is set, the client sends it as a bearer token. Ollama Cloud uses base URL `https://ollama.com` and a cloud model name such as `gemma4:31b`. That cloud model has no published per-token price, so its recorded cost stays unknown.
 
 | Variable | Default | Role |
 | --- | --- | --- |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Local server. Startup does not connect to it. |
+| `OLLAMA_API_KEY` | unset | Bearer credential for Ollama Cloud. Omit it for a local server. |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Local server, or `https://ollama.com` for Ollama Cloud. Startup does not connect to it. |
 | `OLLAMA_MODEL` | `llama3.2` | Model name already available on that server. |
 | `OLLAMA_TIMEOUT_SECONDS` | `60` | Finite HTTP timeout. |
 
@@ -194,6 +195,10 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 `python -m alembic upgrade head` applies `20260929_0002` after the Phase 4 tables. That migration adds quality columns on `requests` and an `evaluations` table. Existing rows stay valid because the new columns are nullable. Alembic loads `DATABASE_URL` through the same settings object as the API, using the absolute repository-root `.env`. A blank or whitespace-only process value does not hide the file. A non-blank process value, or an explicit Alembic `sqlalchemy.url`, still wins. The missing-URL error names the env file path and does not include the URL.
 
+Chat page: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+
+Dashboard: [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)
+
 Health check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
 Readiness check: [http://127.0.0.1:8000/ready](http://127.0.0.1:8000/ready)
@@ -267,6 +272,119 @@ python -m app.evaluation --execute --output evaluation-results.json
 
 Alembic still reads `DATABASE_URL` through the application settings loader. A blank process value does not hide the repository-root `.env`.
 
+## Provider fallback
+
+Fallback stays off until `FALLBACK_ENABLED` is true. Restart the API after changing `.env`.
+
+| Variable | Default | Role |
+| --- | --- | --- |
+| `FALLBACK_ENABLED` | `false` | Allow one recovery call after a fallback-eligible provider failure. |
+| `FALLBACK_MODELS` | empty | Comma-separated documented model ids, in call order. Duplicates and unknown ids are rejected. |
+| `MAX_FALLBACK_ATTEMPTS` | `1` | How many fallback generations one request may start. |
+| `MAX_MODEL_ATTEMPTS` | `3` | Shared cap for the original call, a quality escalation, and fallback. |
+| `REQUEST_DEADLINE_SECONDS` | `90` | Overall deadline. A new generation or judge call is not started after it. |
+| `MAX_JUDGE_CALLS` | `1` | Judge calls are separate from generation attempts and still stop at the deadline. |
+
+Each provider client still makes one attempt. The chat service decides whether another model is allowed. A candidate is used only when it is enabled, has its provider configuration, is a different provider from the attempt that just failed, and has not already been called. `POST /api/v1/chat` accepts an optional `provider`. When that field is set, routing and fallback stay on that provider, so another provider is not called.
+
+Fallback runs for timeouts, connection failures, rate limits, and transient server errors. It does not run for invalid requests, authentication failures, permission failures, safety refusals, quality-check failures, database failures, or client cancellation. Cancelling the request does not start another attempt. A failed database write does not start another model call, and it does not replace the provider error when every generation failed.
+
+Quality escalation and fallback share `MAX_MODEL_ATTEMPTS`. A successful earlier answer is kept when a later escalation and its fallback both fail. The response fields `fallback_used`, `fallback_reason`, `fallback_skips`, and `final_provider` describe that recovery. `routing.escalated` still means the returned answer came from a quality escalation. History attempts include `purpose` (`routing`, `fallback`, or `escalation`) and `error_category`.
+
+`metrics.cost` includes every known generation and judge cost. Unknown usage, including a timeout that did not report tokens, stays unknown and is not stored as zero. `estimated_savings` stays `same_token_volume` and is omitted when the request total cannot be priced. `end_to_end_latency_ms` includes unsuccessful attempts. `metrics.latency_ms` remains the returned answer's provider latency.
+
+Apply the new migration after the Phase 5 revision:
+
+```powershell
+python -m alembic upgrade head
+```
+
+That applies `20260929_0003`. Existing rows stay valid because the new columns are nullable.
+
+From `backend`, with the virtual environment activated:
+
+```powershell
+python -m pytest
+python -m alembic upgrade head
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m app.demo_fallback
+```
+
+`python -m app.demo_fallback` uses in-memory providers. It does not call OpenAI, Anthropic, or Ollama. The pytest suite is mocked too. Neither one verifies a live provider fallback.
+
+## Chat page
+
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/). The dashboard links back to this page. There is no login. Use it only on your machine.
+
+Each send is one independent request. The page does not resend earlier messages, and the model is not given the conversation. The character limit covers the user prompt and system prompt together. It is not a model context window. `GET /api/v1/chat/options` returns that limit, the catalog models, and whether each model is enabled. It does not return credentials.
+
+Routing stays automatic. The provider menu is filled from that options response. A provider with no enabled model cannot be selected. The API does not accept a model id on a chat request, so the page does not offer one. Quality checks, escalation, and fallback are server settings. The page shows whether they are on. It does not add switches for them. A provider limit still applies to fallback and escalation, because the chat service already restricts the registry to that provider.
+
+The answer is rendered as text, with fenced code blocks kept separate. Request details stay collapsed until opened. A missing cost, token count, or latency stays unknown. A recorded zero stays zero. Savings stay labeled as a same-token-volume estimate. If saving the request fails, the answer remains on the page and the details say it was not saved. A stored request links to `/dashboard#request={id}`.
+
+History can open a saved request or copy its prompt into the editor. Copying a prompt does not send it. Send is disabled while a request is in progress, and a failed request leaves the editor text in place. Ctrl+Enter or Cmd+Enter sends from the message field.
+
+The page is the same static frontend as the dashboard. There is no frontend package and no production bundle.
+
+Manual live check, after the API is running and a provider key is configured: open the chat page, leave routing on automatic, and send one short prompt. That call can spend provider credit. Choose a provider only when you intend to spend that account’s usage. This implementation was checked with mocked responses, not a live provider call.
+
+From `backend`:
+
+```powershell
+..\.venv\Scripts\python.exe -m pytest tests\test_chat.py
+node --test tests\chat_view.test.mjs
+node --check app\static\app.js
+node --check app\static\chat_view.mjs
+```
+
+There is no TypeScript project and no frontend production build.
+
+## Dashboard
+
+The dashboard reads stored chat requests. It does not call a provider, and it does not include offline evaluation runs. There is no login. Open it only on your machine. Do not publish port 8000 or put the history API on a public host: stored prompts and answers are visible to anyone who can reach it.
+
+The page is static files served by the API, so there is no frontend package to install and no production bundle to build. The same origin is the API. `window.ROUTELLM_API_BASE` can point the page at another base URL, but cross-origin requests are not enabled.
+
+No new migration is added for the dashboard. Apply the existing revisions if this database has not already been upgraded. The fallback columns from `20260929_0003` are part of the read queries.
+
+From the repository root:
+
+```powershell
+docker compose up -d postgres
+```
+
+From `backend`, with the virtual environment that already has the project dependencies. This repository has been run with the virtual environment one level above `backend`. If you created it inside `backend` instead, use `.\.venv\Scripts\python.exe` in the commands below.
+
+```powershell
+Set-Location backend
+..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). Sending a chat from `/` can spend money. The dashboard only reads history.
+
+`from` is inclusive and `to` is exclusive, both in UTC. A date with no time is UTC midnight. The page treats the chosen end date as inclusive and sends the following midnight as `to`. The range cannot exceed 366 days. Filters select requests by the initial routed model, provider, and status. Attempt rows are then aggregated for those requests.
+
+Request counts are logical chat requests. Generation attempts are counted separately, so one fallback does not add a second request. Fallback rate uses rows where `fallback_used` was recorded. A missing flag is not treated as false. Escalation rate counts quality escalations, not provider fallback. Quality pass, fail, unknown, and error stay separate. A missing verdict is unknown.
+
+Request latency is `end_to_end_latency_ms`. Attempt latency is the provider call. Missing samples are left out of the average and median. Complete and estimated costs are summed separately. Unknown amounts are counted and are not added as zero. Judge costs are the recorded judge component and are not added again on top of the request total. Savings stay labeled `same_token_volume`. Attempt costs are attributed to the provider and model that ran the attempt. A recorded zero, such as local Ollama, stays zero.
+
+The history table shows an 80-character prompt preview. The full prompt is only on the request detail. Prompts and answers are rendered as text.
+
+`?demo=1`, `?demo=empty`, and `?demo=error` are labeled samples. They do not read the database. The normal page does.
+
+Check the dashboard view module and the API:
+
+```powershell
+Set-Location backend
+..\.venv\Scripts\python.exe -m pytest
+node --test tests\dashboard_view.test.mjs
+node --check app\static\dashboard.js
+node --check app\static\dashboard_view.mjs
+```
+
+There is no TypeScript project and no frontend build script. `node --check` only confirms the dashboard scripts parse.
+
 ## Run the tests
 
 From `backend`, with the virtual environment activated.
@@ -294,7 +412,7 @@ From `backend`, after `OPENAI_API_KEY` is set in the repository-root `.env`:
 python scripts\verify_openai.py
 ```
 
-The script sends one Responses API request through `OpenAIProvider` and does not retry. The call uses `gpt-5-nano`, minimal reasoning effort, and `max_output_tokens` of 256. It prints the model, text, token counts, and latency.
+The script sends one Responses API request through `OpenAIProvider` and does not retry. The call uses `gpt-5-nano`, minimal reasoning effort, and the configured `OPENAI_MAX_OUTPUT_TOKENS`. It prints the model, text, token counts, and latency.
 
 Anthropic and Ollama are not called by this script.
 
@@ -311,10 +429,12 @@ No Anthropic credit purchase, Ollama install, or local model download is require
 ```text
 backend/
   app/                 application package
-    main.py            create_app factory, /health, /ready, chat and history
+    main.py            create_app factory, /health, /ready, chat, history, dashboard
     config.py          pydantic-settings configuration
-    api/               chat and history routes
+    api/               chat, history, and dashboard routes
     chat/              classify, select, price, and call one provider
+    dashboard/         filter validation and metric formatting
+    static/            chat page and local dashboard
     db/                SQLAlchemy models and the request store
     pricing/           Decimal cost, baseline, and savings
     providers/         LLMProvider and OpenAI, Anthropic, Ollama clients

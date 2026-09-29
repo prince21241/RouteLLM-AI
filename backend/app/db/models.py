@@ -62,6 +62,10 @@ class RequestRow(Base):
     escalation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_model_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     returned_attempt_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fallback_used: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fallback_skips: Mapped[list[dict[str, str]] | None] = mapped_column(JSONB, nullable=True)
+    final_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     attempts: Mapped[list["AttemptRow"]] = relationship(
         back_populates="request",
         order_by="AttemptRow.attempt_number",
@@ -105,6 +109,8 @@ class AttemptRow(Base):
     cost_completeness: Mapped[str] = mapped_column(String(16), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     pricing_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    error_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     request: Mapped[RequestRow] = relationship(back_populates="attempts")
 

@@ -13,7 +13,7 @@ from app.main import create_app
 def test_defaults(settings: Settings) -> None:
     assert settings.openai_api_key is None
     assert settings.openai_model == "gpt-5-nano"
-    assert settings.openai_max_output_tokens == 256
+    assert settings.openai_max_output_tokens == 2048
     assert settings.openai_timeout_seconds == 30.0
     assert settings.openai_routing_enabled is True
     assert settings.openai_quality_tier == QualityTier.LOW
@@ -23,6 +23,7 @@ def test_defaults(settings: Settings) -> None:
     assert settings.anthropic_timeout_seconds == 30.0
     assert settings.anthropic_routing_enabled is False
     assert settings.anthropic_quality_tier == QualityTier.HIGH
+    assert settings.ollama_api_key is None
     assert settings.ollama_base_url == "http://localhost:11434"
     assert settings.ollama_model == "llama3.2"
     assert settings.ollama_timeout_seconds == 60.0
@@ -42,6 +43,11 @@ def test_defaults(settings: Settings) -> None:
     assert settings.quality_judge_enabled is False
     assert settings.quality_judge_model == "gpt-5-nano"
     assert settings.evaluation_baseline_model == "gpt-5-nano"
+    assert settings.fallback_enabled is False
+    assert settings.fallback_models == ""
+    assert settings.max_fallback_attempts == 1
+    assert settings.request_deadline_seconds == 90.0
+    assert settings.max_judge_calls == 1
 
 
 def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,14 +69,23 @@ def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.openai_api_key.get_secret_value() == "placeholder-openai-key"
 
 
+def test_fallback_models_reject_duplicates_and_unknown_ids() -> None:
+    with pytest.raises(ValidationError, match="duplicate"):
+        Settings(_env_file=None, fallback_models="gpt-5-nano,gpt-5-nano")
+    with pytest.raises(ValidationError, match="unknown model id"):
+        Settings(_env_file=None, fallback_models="gpt-5-nano,not-a-model")
+
+
 def test_blank_api_keys_are_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "   ")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("OLLAMA_API_KEY", "  ")
 
     settings = Settings(_env_file=None)
 
     assert settings.openai_api_key is None
     assert settings.anthropic_api_key is None
+    assert settings.ollama_api_key is None
 
 
 def test_secrets_are_redacted() -> None:
@@ -78,6 +93,7 @@ def test_secrets_are_redacted() -> None:
         _env_file=None,
         openai_api_key="placeholder-openai-key",
         anthropic_api_key="placeholder-anthropic-key",
+        ollama_api_key="placeholder-ollama-key",
     )
 
     rendered = repr(settings)
@@ -85,8 +101,10 @@ def test_secrets_are_redacted() -> None:
 
     assert "placeholder-openai-key" not in rendered
     assert "placeholder-anthropic-key" not in rendered
+    assert "placeholder-ollama-key" not in rendered
     assert "placeholder-openai-key" not in dumped
     assert "placeholder-anthropic-key" not in dumped
+    assert "placeholder-ollama-key" not in dumped
 
     with_database = Settings(
         _env_file=None,

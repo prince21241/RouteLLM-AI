@@ -38,5 +38,8 @@ def build_provider(model: ModelConfig, settings: Settings) -> LLMProvider:
             base_url=settings.ollama_base_url,
             model=model.model_id,
             timeout_seconds=settings.ollama_timeout_seconds,
+            api_key=None
+            if settings.ollama_api_key is None
+            else settings.ollama_api_key.get_secret_value(),
         )
     raise ProviderConfigurationError("The selected provider is not supported")

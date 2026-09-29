@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RouteLLM dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/dashboard.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="mark">RouteLLM</p>
+        <h1>Dashboard</h1>
+        <nav class="nav" aria-label="Pages">
+          <a href="/">Chat</a>
+          <a href="/dashboard" aria-current="page">Dashboard</a>
+        </nav>
+      </div>
+      <p class="ready">Local use only. Times are UTC. No login on this page.</p>
+    </header>
+
+    <main class="dashboard">
+      <p id="demo-banner" class="note" hidden></p>
+
+      <form id="filters" class="filters">
+        <div>
+          <label for="from">From <span>UTC, inclusive</span></label>
+          <input id="from" name="from" type="date" />
+        </div>
+        <div>
+          <label for="to">To <span>UTC, inclusive</span></label>
+          <input id="to" name="to" type="date" />
+        </div>
+        <div>
+          <label for="model">Initial model</label>
+          <input id="model" name="model" type="text" maxlength="128" placeholder="Any model" />
+        </div>
+        <div>
+          <label for="provider">Initial provider</label>
+          <select id="provider" name="provider">
+            <option value="">Any</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="ollama">Ollama</option>
+          </select>
+        </div>
+        <div>
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="">Any</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+        <div class="filter-actions">
+          <button id="apply" type="submit">Apply</button>
+          <button id="reset-filters" type="button">Reset</button>
+        </div>
+      </form>
+
+      <p id="dashboard-status" role="status">Loading dashboard…</p>
+      <button id="retry" type="button" hidden>Retry</button>
+      <p id="empty" class="empty" hidden>No stored requests match these filters.</p>
+
+      <div id="content" hidden>
+        <section id="overview" aria-labelledby="overview-heading">
+          <h2 id="overview-heading">Overview</h2>
+          <div id="cards" class="cards"></div>
+          <div class="charts">
+            <figure>
+              <figcaption>Requests per UTC day</figcaption>
+              <svg id="volume-chart" role="img" aria-label="Request volume by day"></svg>
+            </figure>
+            <figure>
+              <figcaption>Recorded USD by UTC day. Unknown costs are omitted, not drawn as zero.</figcaption>
+              <svg id="cost-chart" role="img" aria-label="Recorded cost by day"></svg>
+            </figure>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <caption>Daily request and cost totals</caption>
+              <thead>
+                <tr>
+                  <th>Day (UTC)</th>
+                  <th>Requests</th>
+                  <th>Complete USD</th>
+                  <th>Estimated USD</th>
+                  <th>Unknown cost rows</th>
+                </tr>
+              </thead>
+              <tbody id="days"></tbody>
+            </table>
+          </div>
+          <details>
+            <summary>How these numbers are counted</summary>
+            <ul id="notes"></ul>
+          </details>
+        </section>
+
+        <section id="breakdown" aria-labelledby="breakdown-heading">
+          <h2 id="breakdown-heading">Providers and models</h2>
+          <div class="table-wrap">
+            <table>
+              <caption>Generation attempts attributed to the provider and model that ran them</caption>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Model</th>
+                  <th>Attempts</th>
+                  <th>Requests</th>
+                  <th>Failed attempts</th>
+                  <th>Complete USD</th>
+                  <th>Estimated USD</th>
+                  <th>Unknown costs</th>
+                  <th>Attempt p50 (ms)</th>
+                </tr>
+              </thead>
+              <tbody id="models"></tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <caption>Judge calls. These costs are not added again on top of the request total.</caption>
+              <thead>
+                <tr>
+                  <th>Judge model</th>
+                  <th>Evaluations</th>
+                  <th>Complete USD</th>
+                  <th>Estimated USD</th>
+                  <th>Unknown costs</th>
+                </tr>
+              </thead>
+              <tbody id="judges"></tbody>
+            </table>
+          </div>
+          <ul id="breakdown-notes" class="note-list"></ul>
+        </section>
+
+        <section id="history-section" aria-labelledby="history-heading">
+          <h2 id="history-heading">Requests</h2>
+          <p id="page-label" class="note"></p>
+          <div class="table-wrap">
+            <table>
+              <caption>Stored chat requests. Open a row for the full prompt.</caption>
+              <thead>
+                <tr>
+                  <th>Created (UTC)</th>
+                  <th>Prompt preview</th>
+                  <th>Status</th>
+                  <th>Initial route</th>
+                  <th>Final route</th>
+                  <th>Attempts</th>
+                  <th>Cost</th>
+                  <th>Latency (ms)</th>
+                  <th>Quality</th>
+                  <th>Escalated</th>
+                  <th>Fallback</th>
+                </tr>
+              </thead>
+              <tbody id="history"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <button id="prev" type="button">Previous</button>
+            <button id="next" type="button">Next</button>
+          </div>
+        </section>
+      </div>
+
+      <section id="detail" hidden aria-labelledby="detail-heading">
+        <h2 id="detail-heading">Request detail</h2>
+        <p id="detail-status" role="status"></p>
+        <button id="detail-retry" type="button" hidden>Retry</button>
+        <div id="detail-body"></div>
+      </section>
+    </main>
+    <script type="module" src="/static/dashboard.js?v=4"></script>
+  </body>
+</html>

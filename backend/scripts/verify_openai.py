@@ -20,7 +20,6 @@ from app.providers.openai import OpenAIProvider
 
 MODEL = "gpt-5-nano"
 PROMPT = "Reply with exactly: Connection successful"
-MAX_OUTPUT_TOKENS = 256
 TIMEOUT_SECONDS = 30.0
 
 _SECRET_PATTERNS = (
@@ -37,11 +36,11 @@ def sanitize(value: str, secret: str) -> str:
     return redacted
 
 
-async def _once(api_key: str) -> LLMResponse:
+async def _once(api_key: str, max_output_tokens: int) -> LLMResponse:
     provider = OpenAIProvider(
         api_key,
         model=MODEL,
-        max_output_tokens=MAX_OUTPUT_TOKENS,
+        max_output_tokens=max_output_tokens,
         timeout_seconds=TIMEOUT_SECONDS,
     )
     try:
@@ -59,7 +58,7 @@ def main() -> int:
 
     secret = key.get_secret_value()
     try:
-        response = asyncio.run(_once(secret))
+        response = asyncio.run(_once(secret, settings.openai_max_output_tokens))
     except ProviderError as exc:
         print(sanitize(str(exc), secret))
         return 1

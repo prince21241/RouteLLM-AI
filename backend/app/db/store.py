@@ -10,6 +10,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
+from app.dashboard.filters import DashboardFilter
+from app.dashboard.raw import BreakdownRaw, DashboardListItem, JudgeRaw, OverviewRaw
+from app.db.analytics import fetch_breakdown, fetch_overview, fetch_requests
 from app.db.models import AttemptRow, EvaluationRow, RequestRow
 from app.db.records import (
     AttemptOutcome,
@@ -109,6 +112,27 @@ class RequestStore:
             summaries = [_summary(row) for row in rows]
         return summaries, int(total or 0)
 
+    async def dashboard_overview(self, filt: DashboardFilter) -> OverviewRaw:
+        """Aggregate stored chat requests in the database."""
+        async with self._sessions() as session:
+            return await fetch_overview(session, filt)
+
+    async def dashboard_breakdown(
+        self,
+        filt: DashboardFilter,
+    ) -> tuple[tuple[BreakdownRaw, ...], tuple[JudgeRaw, ...]]:
+        """Aggregate attempts and judge calls for the filtered requests."""
+        async with self._sessions() as session:
+            return await fetch_breakdown(session, filt)
+
+    async def dashboard_requests(
+        self,
+        filt: DashboardFilter,
+    ) -> tuple[tuple[DashboardListItem, ...], int]:
+        """Return one filtered history page and the filtered request total."""
+        async with self._sessions() as session:
+            return await fetch_requests(session, filt)
+
     async def get_request(self, request_id: uuid.UUID) -> StoredRequest | None:
         """Return one request and its attempts, or ``None`` when it is missing."""
         async with self._sessions() as session:
@@ -155,6 +179,12 @@ def _apply_final(request: RequestRow, outcome: AttemptOutcome) -> None:
     request.escalation_error = outcome.escalation_error
     request.final_model_id = outcome.final_model_id
     request.returned_attempt_number = outcome.returned_attempt_number
+    request.fallback_used = outcome.fallback_used
+    request.fallback_reason = outcome.fallback_reason
+    request.fallback_skips = [
+        {"model_id": model_id, "reason": reason} for model_id, reason in outcome.fallback_skips
+    ]
+    request.final_provider = outcome.final_provider
 
 
 def _evaluation(request_id: uuid.UUID, evaluation: EvaluationWrite) -> EvaluationRow:
@@ -200,6 +230,8 @@ def _attempt(outcome: AttemptOutcome) -> AttemptRow:
         cost_completeness=outcome.cost_completeness,
         error_message=outcome.error_message,
         pricing_snapshot=outcome.pricing_snapshot,
+        purpose=outcome.purpose,
+        error_category=outcome.error_category,
         created_at=outcome.completed_at,
     )
 
@@ -252,6 +284,10 @@ def _detail(row: RequestRow) -> StoredRequest:
         final_model_id=row.final_model_id,
         returned_attempt_number=row.returned_attempt_number,
         evaluations=[_stored_evaluation(item) for item in row.evaluations],
+        fallback_used=row.fallback_used,
+        fallback_reason=row.fallback_reason,
+        fallback_skips=_skips(row.fallback_skips),
+        final_provider=row.final_provider,
     )
 
 
@@ -277,7 +313,23 @@ def _stored_attempt(row: AttemptRow) -> StoredAttempt:
         error_message=row.error_message,
         pricing_snapshot=dict(snapshot) if isinstance(snapshot, dict) else None,
         created_at=row.created_at,
+        purpose=row.purpose,
+        error_category=row.error_category,
     )
+
+
+def _skips(value: object) -> list[tuple[str, str]]:
+    if not isinstance(value, list):
+        return []
+    skips: list[tuple[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("model_id")
+        reason = item.get("reason")
+        if isinstance(model_id, str) and isinstance(reason, str):
+            skips.append((model_id, reason))
+    return skips
 
 
 def _stored_evaluation(row: EvaluationRow) -> StoredEvaluation:

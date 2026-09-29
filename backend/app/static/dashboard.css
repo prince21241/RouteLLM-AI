@@ -1,0 +1,183 @@
+.nav {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 0.35rem;
+}
+
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nav a[aria-current="page"] {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.dashboard {
+  display: grid;
+  gap: 1rem;
+  padding: 0 1.5rem 2rem;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.filters input,
+.filters select,
+.filters button {
+  width: 100%;
+}
+
+.filter-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.filters button,
+.pager button,
+#retry,
+#detail-retry {
+  margin-top: 0;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.card span,
+.note,
+.note-list,
+figcaption,
+caption {
+  color: var(--muted);
+}
+
+.card strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 1.05rem;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+figure {
+  margin: 0;
+}
+
+svg {
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 44rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.num,
+time {
+  font-family: Consolas, "Courier New", monospace;
+  white-space: nowrap;
+}
+
+.linkish {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pager {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.pager button {
+  width: auto;
+  min-width: 7rem;
+}
+
+.prompt,
+.answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  margin-top: 0.8rem;
+}
+
+#detail-body h3 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.note-list {
+  margin: 0.8rem 0 0;
+  padding-left: 1.1rem;
+}
+
+@media (max-width: 900px) {
+  .dashboard {
+    padding: 0 0.8rem 1.5rem;
+  }
+
+  .filters,
+  .cards,
+  .charts {
+    grid-template-columns: 1fr;
+  }
+
+  .top {
+    align-items: start;
+    flex-direction: column;
+  }
+}

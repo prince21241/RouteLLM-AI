@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RouteLLM</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="mark">RouteLLM</p>
+        <h1>Chat</h1>
+        <nav class="nav" aria-label="Pages">
+          <a href="/" aria-current="page">Chat</a>
+          <a href="/dashboard">Dashboard</a>
+        </nav>
+      </div>
+      <p id="ready" class="ready">Checking the API…</p>
+    </header>
+
+    <main class="layout">
+      <section class="composer-panel" aria-labelledby="composer-heading">
+        <h2 id="composer-heading">Prompt</h2>
+        <p id="independence" class="note">Each send is a new request. Earlier messages are not included.</p>
+        <form id="chat-form">
+          <label for="prompt">Message</label>
+          <textarea id="prompt" name="prompt" rows="6" required placeholder="Ask a question"></textarea>
+
+          <label for="system-prompt">System prompt <span>optional</span></label>
+          <textarea id="system-prompt" name="system_prompt" rows="2" placeholder="Leave blank to omit"></textarea>
+
+          <label for="provider">Routing</label>
+          <select id="provider" name="provider">
+            <option value="">Automatic routing</option>
+          </select>
+          <p id="provider-status" class="note">Loading routing choices…</p>
+          <ul id="feature-status" class="feature-list"></ul>
+          <p class="note">API keys stay on the server. Limiting a provider sends this prompt only to that provider and can spend that account’s usage.</p>
+
+          <button id="send" type="submit">Send</button>
+          <p id="pending-status" class="note" role="status" hidden>Sending…</p>
+          <p id="form-status" class="note" role="status"></p>
+          <p id="error" class="error" role="alert" hidden></p>
+        </form>
+      </section>
+
+      <section class="answer-panel" aria-labelledby="answer-heading">
+        <h2 id="answer-heading">Answer</h2>
+        <p id="empty" class="empty">Send a prompt to see the routed answer, cost, and savings.</p>
+        <article id="answer" hidden>
+          <p id="answer-banner" class="banner"></p>
+          <div id="answer-text" class="markdown"></div>
+          <details id="details">
+            <summary>Request details</summary>
+            <dl id="facts" class="facts"></dl>
+            <h3>Attempts</h3>
+            <p id="attempts-empty" class="note">Attempt rows appear when the saved request is loaded.</p>
+            <div class="table-wrap">
+              <table id="attempts">
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Purpose</th>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Model</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Tokens</th>
+                    <th scope="col">Latency</th>
+                    <th scope="col">Cost</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p id="savings-note" class="note"></p>
+            <p id="dashboard-link-row"><a id="dashboard-link" href="/dashboard">Open this request in the dashboard</a></p>
+          </details>
+          <button id="use-prompt" type="button" hidden>Use this prompt</button>
+        </article>
+      </section>
+
+      <aside class="history-panel" aria-labelledby="history-heading">
+        <h2 id="history-heading">History</h2>
+        <p id="history-status" class="empty">Loading stored requests…</p>
+        <ol id="history"></ol>
+      </aside>
+    </main>
+    <script type="module" src="/static/app.js?v=5"></script>
+  </body>
+</html>

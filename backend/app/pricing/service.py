@@ -155,7 +155,10 @@ def lookup_prices(model_id: str) -> VerifiedModelMetadata | None:
     """Return verified prices for ``model_id``, or ``None`` when unpublished."""
     if model_id == "":
         return None
-    return verified_metadata(model_id)
+    metadata = verified_metadata(model_id)
+    if metadata is None or not metadata.list_price_published:
+        return None
+    return metadata
 
 
 def _openai_cost(usage: ReportedUsage, metadata: VerifiedModelMetadata) -> CostEstimate:

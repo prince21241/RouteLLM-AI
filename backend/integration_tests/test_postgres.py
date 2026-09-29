@@ -5,89 +5,18 @@ They do not run as part of the default offline suite.
 """
 
 import asyncio
-import os
-import re
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from alembic import command
-from app.config import Settings
-from app.db.session import build_store
 from app.main import create_app
 from app.providers.errors import ProviderUpstreamError
 from app.routing.catalog import _VERIFIED, verified_metadata
-from app.routing.model_registry import ModelRegistry
 from tests.test_chat import PROMPT, RecordingProvider
 from tests.test_lifecycle import _app
-
-DEFAULT_TEST_URL = "postgresql+asyncpg://routellm:routellm@127.0.0.1:5432/routellm_test"
-_NAME = re.compile(r"^[a-z][a-z0-9_]*_test$")
-
-
-def _database_name(url: str) -> str:
-    name = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
-    if not _NAME.fullmatch(name):
-        raise RuntimeError("Refusing to migrate a database whose name does not end with _test")
-    return name
-
-
-def _admin_dsn(url: str) -> str:
-    _database_name(url)
-    prefix = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[0]
-    return (prefix + "/postgres").replace("postgresql+asyncpg://", "postgresql://", 1)
-
-
-async def _recreate(url: str) -> None:
-    import asyncpg
-
-    name = _database_name(url)
-    connection = await asyncpg.connect(_admin_dsn(url))
-    try:
-        await connection.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-        await connection.execute(f'CREATE DATABASE "{name}"')
-    finally:
-        await connection.close()
-
-
-def _upgrade(url: str) -> None:
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", url)
-    command.upgrade(config, "head")
-
-
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    url = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_URL)
-    _database_name(url)
-    try:
-        asyncio.run(_recreate(url))
-    except Exception as exc:
-        raise RuntimeError(
-            "PostgreSQL test database setup failed "
-            f"({type(exc).__name__}). Start it with: docker compose up -d postgres"
-        ) from None
-    _upgrade(url)
-    return url
-
-
-@pytest.fixture
-def store(database_url: str):
-    request_store, engine = build_store(database_url, null_pool=True)
-
-    async def clean() -> None:
-        async with engine.begin() as connection:
-            await connection.execute(text("DELETE FROM evaluations"))
-            await connection.execute(text("DELETE FROM attempts"))
-            await connection.execute(text("DELETE FROM requests"))
-
-    asyncio.run(clean())
-    yield request_store, engine
-    asyncio.run(engine.dispose())
 
 
 def test_migrations_create_request_tables(store) -> None:
@@ -108,18 +37,25 @@ def test_migrations_create_request_tables(store) -> None:
                     "WHERE table_name = 'requests' AND column_name = 'quality_verdict'"
                 )
             )
+            fallback_used = await connection.scalar(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'requests' AND column_name = 'fallback_used'"
+                )
+            )
             cost_type = await connection.scalar(
                 text(
                     "SELECT data_type FROM information_schema.columns "
                     "WHERE table_name = 'requests' AND column_name = 'total_cost'"
                 )
             )
-        return names, cost_type, verdict
+        return names, cost_type, verdict, fallback_used
 
-    names, cost_type, verdict = asyncio.run(table_names())
+    names, cost_type, verdict, fallback_used = asyncio.run(table_names())
     assert {"requests", "attempts", "evaluations", "alembic_version"} <= names
     assert cost_type == "numeric"
     assert verdict == "quality_verdict"
+    assert fallback_used == "fallback_used"
 
 
 def test_success_is_persisted_with_its_attempt(store) -> None:

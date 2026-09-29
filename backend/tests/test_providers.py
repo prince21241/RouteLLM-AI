@@ -203,7 +203,7 @@ def test_openai_normalizes_text_usage_and_latency(
         assert sent == {
             "model": "gpt-5-nano",
             "input": "Hello",
-            "max_output_tokens": 256,
+            "max_output_tokens": 2048,
             "reasoning": {"effort": "minimal"},
         }
         assert response.provider is Provider.OPENAI
@@ -472,6 +472,27 @@ def test_ollama_normalizes_text_usage_and_latency(
         assert response.output_tokens == 298
         assert response.latency_ms == 125
         assert response.estimated_cost is None
+
+    asyncio.run(scenario())
+
+
+def test_ollama_sends_bearer_token_when_configured() -> None:
+    cloud_key = "placeholder-ollama-key"
+
+    async def scenario() -> None:
+        seen, transport = scripted(json_response(200, ollama_body()))
+        async with httpx.AsyncClient(transport=transport) as client:
+            provider = OllamaProvider(
+                base_url="https://ollama.com",
+                api_key=cloud_key,
+                client=client,
+            )
+            await provider.generate("Hello")
+            assert cloud_key not in repr(provider)
+
+        assert str(seen[0].url) == "https://ollama.com/api/chat"
+        assert seen[0].headers["authorization"] == f"Bearer {cloud_key}"
+        assert cloud_key not in seen[0].content.decode()
 
     asyncio.run(scenario())
 

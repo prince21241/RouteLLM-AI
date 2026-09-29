@@ -171,3 +171,20 @@ def test_ollama_stays_disabled_until_its_routing_flag_is_set() -> None:
     assert [model.model_id for model in enabled] == ["llama3.2"]
     assert enabled[0].local is True
     assert registry.get("gpt-5-nano").enabled is False
+
+
+def test_ollama_cloud_model_can_be_enabled() -> None:
+    registry = build_catalog(
+        Settings(
+            _env_file=None,
+            ollama_model="gemma4:31b",
+            ollama_routing_enabled=True,
+            openai_routing_enabled=False,
+        )
+    )
+
+    enabled = registry.list_enabled()
+
+    assert [model.model_id for model in enabled] == ["gemma4:31b"]
+    assert enabled[0].local is False
+    assert enabled[0].context_window == 262_144

@@ -1,25 +1,38 @@
 """Classify a request, select one model, and call that provider.
 
-Quality checks and escalation are off unless settings enable them. A
-provider failure on the first call stops the request. There is no provider
-retry and no provider fallback. At most one extra generation runs, and only
-after an explicit quality failure. When a store is configured, the pending
-row is committed before the provider call and the outcome is committed
-afterward. The database transaction is not held open across the network.
+Quality checks, escalation, and provider fallback are off unless settings
+enable them. With fallback disabled, a provider failure on the first call
+stops the request. There is no provider retry. Escalation still allows at
+most one extra generation after an explicit quality failure. With fallback
+enabled, a fallback-eligible failure may call one other provider, and the
+original call, escalation, and fallback share one generation budget. When a
+store is configured, the pending row is committed before the provider call
+and the outcome is committed afterward. The database transaction is not
+held open across the network.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from app.api.chat_schemas import ChatMetrics, ChatResponse, RoutingDetails
+from app.api.chat_schemas import (
+    ChatMetrics,
+    ChatModelChoice,
+    ChatOptionsResponse,
+    ChatResponse,
+    FallbackSkip,
+    RoutingDetails,
+    ServerFeature,
+)
 from app.api.schemas import LLMResponse, ModelConfig, Provider, ReportedUsage
-from app.config import Settings
+from app.chat.fallback import SkippedCandidate, select_fallback_candidates
+from app.config import Settings, fallback_model_ids
 from app.db.records import AttemptOutcome, EvaluationWrite, PendingRequest
 from app.db.store import RequestStore
 from app.evaluation.escalation import select_escalation_target
@@ -39,7 +52,12 @@ from app.pricing.service import (
 )
 from app.providers.base import LLMProvider
 from app.providers.client import monotonic_now
-from app.providers.errors import ProviderError, ProviderResponseError
+from app.providers.errors import (
+    ProviderError,
+    ProviderFallbackExhaustedError,
+    ProviderTimeoutError,
+)
+from app.providers.failure import ProviderFailure, classify_provider_error
 from app.routing.catalog import VerifiedModelMetadata
 from app.routing.complexity import ComplexityClassifier
 from app.routing.model_registry import ModelRegistry
@@ -85,8 +103,34 @@ class ChatService:
         self._store = store
         self._evaluator = evaluator
 
-    async def complete(self, prompt: str, system_prompt: str | None = None) -> ChatResponse:
-        """Validate, route, and generate once."""
+    def describe_options(self) -> ChatOptionsResponse:
+        """Return catalog and server-feature status. No credentials are included."""
+        return ChatOptionsResponse(
+            max_input_characters=self._settings.max_input_characters,
+            models=[
+                ChatModelChoice(
+                    model_id=model.model_id,
+                    model_name=model.model_name,
+                    provider=model.provider,
+                    quality_tier=model.quality_tier,
+                    enabled=model.enabled,
+                    local=model.local,
+                )
+                for model in self._registry.list_all()
+            ],
+            quality_evaluation=ServerFeature(enabled=self._settings.quality_evaluation_enabled),
+            escalation=ServerFeature(enabled=self._settings.escalation_enabled),
+            fallback=ServerFeature(enabled=self._settings.fallback_enabled),
+        )
+
+    async def complete(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        *,
+        provider: Provider | None = None,
+    ) -> ChatResponse:
+        """Validate, route, and generate. Fallback runs only when enabled."""
         started = monotonic_now()
         user_prompt, system = _validated_input(
             prompt,
@@ -99,7 +143,7 @@ class ChatService:
             low=self._settings.low_complexity_threshold,
             high=self._settings.high_complexity_threshold,
         )
-        decision = self._router.select(assessment.tier, self._registry)
+        decision = self._router.select(assessment.tier, _registry_for(self._registry, provider))
         request_id = uuid4()
         created_at = datetime.now(timezone.utc)
         if self._store is not None:
@@ -124,15 +168,25 @@ class ChatService:
                 _log_persistence(request_id, exc)
                 raise PersistenceUnavailableError() from None
 
-        provider: LLMProvider | None = None
+        provider_client: LLMProvider | None = None
         second_provider: LLMProvider | None = None
         owned_evaluator: object | None = None
         provider_started = monotonic_now()
         try:
+            if self._settings.fallback_enabled:
+                return await self._complete_with_fallback(
+                    user_prompt=user_prompt,
+                    system=system,
+                    assessment=assessment,
+                    decision=decision,
+                    request_id=request_id,
+                    started=started,
+                    restricted_provider=provider,
+                )
             try:
-                provider = self._provider_factory(decision.model)
+                provider_client = self._provider_factory(decision.model)
                 provider_started = monotonic_now()
-                generated = await provider.generate(user_prompt, system)
+                generated = await provider_client.generate(user_prompt, system)
             except ProviderError as exc:
                 await self._record_failure(
                     request_id=request_id,
@@ -262,14 +316,509 @@ class ChatService:
                 returned_attempt=returned_attempt,
             )
         finally:
-            if provider is not None:
-                await _close_provider(provider)
+            if provider_client is not None:
+                await _close_provider(provider_client)
             if second_provider is not None:
                 await _close_provider(second_provider)
             if owned_evaluator is not None:
                 close_evaluator = getattr(owned_evaluator, "aclose", None)
                 if close_evaluator is not None:
                     await close_evaluator()
+
+    async def _complete_with_fallback(
+        self,
+        *,
+        user_prompt: str,
+        system: str | None,
+        assessment: object,
+        decision: object,
+        request_id: object,
+        started: float,
+        restricted_provider: Provider | None,
+    ) -> ChatResponse:
+        """Run routing, at most one fallback, and at most one quality escalation."""
+        clients: list[LLMProvider] = []
+        owned_evaluator: object | None = None
+        calls: list[_Call] = []
+        skips: list[SkippedCandidate] = []
+        generations = 0
+        fallbacks = 0
+        judge_calls = 0
+        fallback_used = False
+        fallback_reason: str | None = None
+        try:
+            primary = await self._one_generation(
+                model=decision.model,  # type: ignore[attr-defined]
+                purpose="routing",
+                user_prompt=user_prompt,
+                system=system,
+                started=started,
+                clients=clients,
+            )
+            assert primary is not None
+            generations += 1
+            calls.append(primary)
+            if primary.failure is not None and primary.failure.fallback_eligible:
+                extra, extra_skips, fallbacks = await self._fallback_after(
+                    failed=primary,
+                    calls=calls,
+                    skips=skips,
+                    generations=generations,
+                    fallbacks=fallbacks,
+                    user_prompt=user_prompt,
+                    system=system,
+                    started=started,
+                    clients=clients,
+                    restricted_provider=restricted_provider,
+                )
+                generations += extra
+                if extra:
+                    fallback_used = True
+                    fallback_reason = primary.failure.category.value
+                skips.extend(extra_skips)
+            success = next((call for call in reversed(calls) if call.generated is not None), None)
+            if success is None:
+                await self._persist_fallback(
+                    request_id=request_id,
+                    calls=calls,
+                    returned=None,
+                    evaluation=None,
+                    escalated=False,
+                    escalation_reason=None,
+                    escalation_error=None,
+                    fallback_used=fallback_used,
+                    fallback_reason=fallback_reason,
+                    skips=skips,
+                    started=started,
+                    status="failed",
+                )
+                if fallback_used:
+                    raise ProviderFallbackExhaustedError()
+                assert primary.error is not None
+                raise primary.error
+
+            evaluation, owned_evaluator, judge_calls = await self._maybe_judge(
+                user_prompt=user_prompt,
+                answer=success.generated.content if success.generated is not None else "",
+                started=started,
+                judge_calls=judge_calls,
+                owned_evaluator=owned_evaluator,
+            )
+            returned = success
+            escalated = False
+            escalation_reason: str | None = None
+            escalation_error: str | None = None
+            if (
+                evaluation is not None
+                and evaluation.verdict == "fail"
+                and self._settings.escalation_enabled
+                and generations < self._settings.max_model_attempts
+                and _deadline_open(started, self._settings.request_deadline_seconds)
+            ):
+                target = select_escalation_target(
+                    success.model,
+                    self._registry,
+                    self._settings,
+                )
+                escalation_reason = f"initial answer failed quality; {target.reason}"
+                if target.model is None:
+                    escalation_error = target.reason
+                elif (target.model.provider.value, target.model.model_id) in _used_pairs(calls):
+                    escalation_error = "This provider and model were already called."
+                else:
+                    escalated_call = await self._one_generation(
+                        model=target.model,
+                        purpose="escalation",
+                        user_prompt=user_prompt,
+                        system=system,
+                        started=started,
+                        clients=clients,
+                    )
+                    if escalated_call is None:
+                        escalation_error = "The request deadline was reached."
+                    else:
+                        generations += 1
+                        calls.append(escalated_call)
+                        if escalated_call.generated is not None:
+                            returned = escalated_call
+                            escalated = True
+                        else:
+                            escalation_error = (
+                                None if escalated_call.failure is None else escalated_call.failure.message
+                            )
+                            if (
+                                escalated_call.failure is not None
+                                and escalated_call.failure.fallback_eligible
+                            ):
+                                extra, extra_skips, fallbacks = await self._fallback_after(
+                                    failed=escalated_call,
+                                    calls=calls,
+                                    skips=skips,
+                                    generations=generations,
+                                    fallbacks=fallbacks,
+                                    user_prompt=user_prompt,
+                                    system=system,
+                                    started=started,
+                                    clients=clients,
+                                    restricted_provider=restricted_provider,
+                                )
+                                generations += extra
+                                skips.extend(extra_skips)
+                                if extra:
+                                    fallback_used = True
+                                    fallback_reason = escalated_call.failure.category.value
+                                replacement = next(
+                                    (
+                                        call
+                                        for call in reversed(calls)
+                                        if call.generated is not None and call is not success
+                                    ),
+                                    None,
+                                )
+                                if replacement is not None:
+                                    returned = replacement
+            if returned.generated is None:
+                returned = success
+            status, warning = await self._persist_fallback(
+                request_id=request_id,
+                calls=calls,
+                returned=returned,
+                evaluation=evaluation,
+                escalated=escalated,
+                escalation_reason=escalation_reason,
+                escalation_error=escalation_error,
+                fallback_used=fallback_used,
+                fallback_reason=fallback_reason,
+                skips=skips,
+                started=started,
+                status="succeeded",
+            )
+            assert returned.generated is not None and returned.priced is not None
+            total = _combined_cost(calls, evaluation)
+            savings_price = returned.priced
+            if total.total is None:
+                savings_price = replace_savings_unknown(returned.priced)
+            return _chat_response(
+                request_id=str(request_id),
+                generated=returned.generated,
+                assessment_score=assessment.score,  # type: ignore[attr-defined]
+                assessment_tier=assessment.tier,  # type: ignore[attr-defined]
+                assessment_reasons=list(assessment.reasons),  # type: ignore[attr-defined]
+                provider=decision.model.provider,  # type: ignore[attr-defined]
+                model_id=decision.model.model_id,  # type: ignore[attr-defined]
+                model_tier=decision.model.quality_tier,  # type: ignore[attr-defined]
+                selection_reason=decision.selection_reason,  # type: ignore[attr-defined]
+                degraded=decision.degraded,  # type: ignore[attr-defined]
+                priced=savings_price,
+                total_estimate=total,
+                end_to_end_ms=_elapsed_ms(started),
+                persistence_status=status,
+                persistence_warning=warning,
+                escalated=escalated,
+                evaluation=evaluation,
+                escalation_reason=escalation_reason,
+                escalation_error=escalation_error,
+                returned_model=returned.model.model_id,
+                returned_attempt=calls.index(returned) + 1,
+                fallback_used=fallback_used,
+                fallback_reason=fallback_reason,
+                fallback_skips=skips,
+                final_provider=returned.model.provider.value,
+            )
+        finally:
+            for client in clients:
+                await _close_provider(client)
+            if owned_evaluator is not None:
+                close_evaluator = getattr(owned_evaluator, "aclose", None)
+                if close_evaluator is not None:
+                    await close_evaluator()
+
+    async def _fallback_after(
+        self,
+        *,
+        failed: "_Call",
+        calls: list["_Call"],
+        skips: list[SkippedCandidate],
+        generations: int,
+        fallbacks: int,
+        user_prompt: str,
+        system: str | None,
+        started: float,
+        clients: list[LLMProvider],
+        restricted_provider: Provider | None,
+    ) -> tuple[int, list[SkippedCandidate], int]:
+        """Call eligible fallback models. Returns generations added, new skips, fallback count."""
+        del skips
+        remaining_fallbacks = self._settings.max_fallback_attempts - fallbacks
+        remaining_generations = self._settings.max_model_attempts - generations
+        limit = min(remaining_fallbacks, remaining_generations)
+        candidates, skipped = select_fallback_candidates(
+            fallback_model_ids(self._settings),
+            self._registry,
+            used=_used_pairs(calls),
+            failed_provider=failed.model.provider,
+            restricted_provider=restricted_provider,
+            limit=max(limit, 0),
+        )
+        if limit < 1:
+            skipped = [
+                *skipped,
+                *[
+                    SkippedCandidate(model_id, "The generation attempt limit was reached.")
+                    for model_id in fallback_model_ids(self._settings)
+                    if model_id not in {item.model_id for item in skipped}
+                    and model_id not in {call.model.model_id for call in calls}
+                ],
+            ]
+            return 0, skipped, fallbacks
+        added = 0
+        for model in candidates:
+            if not _deadline_open(started, self._settings.request_deadline_seconds):
+                skipped.append(SkippedCandidate(model.model_id, "The request deadline was reached."))
+                break
+            if generations + added >= self._settings.max_model_attempts:
+                skipped.append(
+                    SkippedCandidate(model.model_id, "The generation attempt limit was reached.")
+                )
+                break
+            if fallbacks >= self._settings.max_fallback_attempts:
+                break
+            call = await self._one_generation(
+                model=model,
+                purpose="fallback",
+                user_prompt=user_prompt,
+                system=system,
+                started=started,
+                clients=clients,
+            )
+            if call is None:
+                skipped.append(SkippedCandidate(model.model_id, "The request deadline was reached."))
+                break
+            calls.append(call)
+            added += 1
+            fallbacks += 1
+            if call.generated is not None or (
+                call.failure is not None and not call.failure.fallback_eligible
+            ):
+                break
+        return added, skipped, fallbacks
+
+    async def _one_generation(
+        self,
+        *,
+        model: ModelConfig,
+        purpose: str,
+        user_prompt: str,
+        system: str | None,
+        started: float,
+        clients: list[LLMProvider],
+    ) -> "_Call | None":
+        timeout = _call_timeout(self._settings, model, started)
+        if timeout is None:
+            exc = ProviderTimeoutError("The request deadline was reached")
+            failure = classify_provider_error(exc)
+            return _Call(
+                model=model,
+                purpose=purpose,
+                generated=None,
+                error=exc,
+                failure=failure,
+                latency_ms=0,
+                priced=_price_usage(None, model.model_id, model.provider.value, self._settings),
+            )
+        call_started = monotonic_now()
+        client: LLMProvider | None = None
+        try:
+            client = self._provider_factory(model)
+            clients.append(client)
+            generated = await asyncio.wait_for(
+                client.generate(user_prompt, system),
+                timeout=timeout,
+            )
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            exc: ProviderError = ProviderTimeoutError(f"{model.provider.value} request timed out")
+            failure = classify_provider_error(exc)
+            return _Call(
+                model=model,
+                purpose=purpose,
+                generated=None,
+                error=exc,
+                failure=failure,
+                latency_ms=(monotonic_now() - call_started) * 1000,
+                priced=_price_usage(None, model.model_id, model.provider.value, self._settings),
+            )
+        except ProviderError as exc:
+            failure = classify_provider_error(exc)
+            return _Call(
+                model=model,
+                purpose=purpose,
+                generated=None,
+                error=exc,
+                failure=failure,
+                latency_ms=(monotonic_now() - call_started) * 1000,
+                priced=_price_usage(
+                    failure.usage,
+                    model.model_id,
+                    model.provider.value,
+                    self._settings,
+                ),
+            )
+        return _Call(
+            model=model,
+            purpose=purpose,
+            generated=generated,
+            error=None,
+            failure=None,
+            latency_ms=generated.latency_ms,
+            priced=_price_success(generated, model.model_id, self._settings),
+        )
+
+    async def _maybe_judge(
+        self,
+        *,
+        user_prompt: str,
+        answer: str,
+        started: float,
+        judge_calls: int,
+        owned_evaluator: object | None,
+    ) -> tuple[EvaluationResult | None, object | None, int]:
+        if not self._settings.quality_evaluation_enabled:
+            return None, owned_evaluator, judge_calls
+        if judge_calls >= self._settings.max_judge_calls:
+            return (
+                EvaluationResult(
+                    verdict="unknown",
+                    score=None,
+                    reasons=("The judge call limit was reached.",),
+                    method="live",
+                ),
+                owned_evaluator,
+                judge_calls,
+            )
+        if not _deadline_open(started, self._settings.request_deadline_seconds):
+            return (
+                EvaluationResult(
+                    verdict="unknown",
+                    score=None,
+                    reasons=("The request deadline was reached before the quality check.",),
+                    method="live",
+                ),
+                owned_evaluator,
+                judge_calls,
+            )
+        evaluator = self._evaluator
+        if evaluator is None:
+            evaluator = build_live_evaluator(self._settings)
+            owned_evaluator = evaluator
+        remaining = _remaining_seconds(started, self._settings.request_deadline_seconds)
+        try:
+            result = await asyncio.wait_for(
+                evaluator.evaluate(user_prompt, answer),  # type: ignore[attr-defined]
+                timeout=remaining,
+            )
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            result = EvaluationResult(
+                verdict="unknown",
+                score=None,
+                reasons=("The request deadline was reached before the quality check.",),
+                method="live",
+            )
+        except Exception:
+            result = EvaluationResult(
+                verdict="error",
+                score=None,
+                reasons=("The quality evaluator failed.",),
+                method="live",
+                error_message="The quality evaluator failed.",
+            )
+        return result, owned_evaluator, judge_calls + 1
+
+    async def _persist_fallback(
+        self,
+        *,
+        request_id: object,
+        calls: list["_Call"],
+        returned: "_Call | None",
+        evaluation: EvaluationResult | None,
+        escalated: bool,
+        escalation_reason: str | None,
+        escalation_error: str | None,
+        fallback_used: bool,
+        fallback_reason: str | None,
+        skips: list[SkippedCandidate],
+        started: float,
+        status: str,
+    ) -> tuple[str, str | None]:
+        if self._store is None:
+            return "not_configured", None
+        total = _combined_cost(calls, evaluation)
+        outcomes = [
+            _call_outcome(
+                request_id=request_id,
+                call=call,
+                attempt_number=index,
+                started=started,
+                settings=self._settings,
+            )
+            for index, call in enumerate(calls, start=1)
+        ]
+        anchor = outcomes[-1] if outcomes else _failed_anchor(request_id, started)
+        if returned is not None and returned.priced is not None and returned.generated is not None:
+            anchor = _call_outcome(
+                request_id=request_id,
+                call=returned,
+                attempt_number=calls.index(returned) + 1,
+                started=started,
+                settings=self._settings,
+            )
+        savings_total = None if total.total is None else anchor.estimated_savings
+        final = _with_check(
+            replace(
+                anchor,
+                status=status,
+                response_text=None if returned is None or returned.generated is None else returned.generated.content,
+                total_cost=total.total,
+                cost_completeness=total.completeness.value,
+                estimated_savings=savings_total,
+                end_to_end_latency_ms=_elapsed_ms(started),
+                error_message=None if status == "succeeded" else anchor.error_message,
+            ),
+            total_estimate=total,
+            escalated=escalated,
+            evaluation=evaluation,
+            escalation_reason=escalation_reason,
+            escalation_error=escalation_error,
+            final_model_id=None if returned is None else returned.model.model_id,
+            returned_attempt=1 if returned is None else calls.index(returned) + 1,
+        )
+        final = replace(
+            final,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+            fallback_skips=tuple((item.model_id, item.reason) for item in skips),
+            final_provider=None if returned is None else returned.model.provider.value,
+        )
+        try:
+            save_attempt = getattr(self._store, "save_attempt", None)
+            finalize = getattr(self._store, "finalize_request", None)
+            if save_attempt is not None and finalize is not None:
+                for outcome in outcomes:
+                    await save_attempt(outcome)
+                await finalize(final)
+            elif status == "succeeded":
+                await self._store.record_success(final)
+            else:
+                await self._store.record_failure(final)
+        except Exception as exc:
+            _log_persistence(request_id, exc)
+            if status != "succeeded":
+                return "failed", None
+            return "failed", _PERSISTENCE_WARNING
+        return "stored", None
 
     async def _record_failure(
         self,
@@ -283,9 +832,8 @@ class ChatService:
     ) -> None:
         if self._store is None:
             return
-        usage = exc.usage if isinstance(exc, ProviderResponseError) else None
-        if not isinstance(usage, ReportedUsage):
-            usage = None
+        failure = classify_provider_error(exc)
+        usage = failure.usage
         priced = _price_usage(usage, configured_model_id, decision_provider, self._settings)
         try:
             await self._store.record_failure(
@@ -298,9 +846,11 @@ class ChatService:
                     usage=usage,
                     provider_latency_ms=provider_latency_ms,
                     priced=priced,
-                    error_message=str(exc)[:500],
+                    error_message=failure.message,
                     response_text=None,
                     started=started,
+                    purpose="routing",
+                    error_category=failure.category.value,
                 )
             )
         except Exception as persist_exc:
@@ -596,6 +1146,8 @@ def _outcome(
     error_message: str | None,
     response_text: str | None,
     started: float,
+    purpose: str = "routing",
+    error_category: str | None = None,
 ) -> AttemptOutcome:
     return AttemptOutcome(
         request_id=request_id,  # type: ignore[arg-type]
@@ -623,6 +1175,8 @@ def _outcome(
         premium_baseline_model=priced.baseline_model,
         premium_baseline_cost=priced.baseline_cost,
         estimated_savings=priced.estimated_savings,
+        purpose=purpose,
+        error_category=error_category,
     )
 
 
@@ -649,6 +1203,10 @@ def _chat_response(
     escalation_error: str | None = None,
     returned_model: str | None = None,
     returned_attempt: int = 1,
+    fallback_used: bool = False,
+    fallback_reason: str | None = None,
+    fallback_skips: list[SkippedCandidate] | None = None,
+    final_provider: str | None = None,
 ) -> ChatResponse:
     return ChatResponse(
         request_id=request_id,
@@ -685,6 +1243,13 @@ def _chat_response(
         escalation_error=escalation_error,
         returned_model=returned_model,
         returned_attempt=returned_attempt,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+        fallback_skips=[
+            FallbackSkip(model_id=item.model_id, reason=item.reason)
+            for item in (fallback_skips or [])
+        ],
+        final_provider=final_provider,
     )
 
 
@@ -726,6 +1291,120 @@ def _latency(value: float) -> Decimal:
 
 def _elapsed_ms(started: float) -> Decimal:
     return Decimal(str(round((monotonic_now() - started) * 1000, 3)))
+
+
+@dataclass
+class _Call:
+    """One generation inside a fallback-enabled request."""
+
+    model: ModelConfig
+    purpose: str
+    generated: LLMResponse | None
+    error: ProviderError | None
+    failure: ProviderFailure | None
+    latency_ms: float
+    priced: _Priced | None
+
+
+def _registry_for(registry: ModelRegistry, provider: Provider | None) -> ModelRegistry:
+    if provider is None:
+        return registry
+    return ModelRegistry([model for model in registry.list_all() if model.provider is provider])
+
+
+def _deadline_open(started: float, deadline_seconds: float) -> bool:
+    return _remaining_seconds(started, deadline_seconds) > 0
+
+
+def _remaining_seconds(started: float, deadline_seconds: float) -> float:
+    return deadline_seconds - (monotonic_now() - started)
+
+
+def _call_timeout(settings: Settings, model: ModelConfig, started: float) -> float | None:
+    remaining = _remaining_seconds(started, settings.request_deadline_seconds)
+    if remaining <= 0:
+        return None
+    per_attempt = {
+        Provider.OPENAI: settings.openai_timeout_seconds,
+        Provider.ANTHROPIC: settings.anthropic_timeout_seconds,
+        Provider.OLLAMA: settings.ollama_timeout_seconds,
+    }[model.provider]
+    return min(per_attempt, remaining)
+
+
+def _used_pairs(calls: list[_Call]) -> set[tuple[str, str]]:
+    return {(call.model.provider.value, call.model.model_id) for call in calls}
+
+
+def _combined_cost(calls: list[_Call], evaluation: EvaluationResult | None) -> CostEstimate:
+    parts = [call.priced.estimate for call in calls if call.priced is not None]
+    if evaluation is not None and evaluation.judge_cost is not None:
+        parts.append(evaluation.judge_cost)
+    if not parts:
+        return CostEstimate(total=None, completeness=CostCompleteness.UNKNOWN)
+    return combine_costs(parts)
+
+
+def replace_savings_unknown(priced: _Priced) -> _Priced:
+    """Hide a savings figure when the request total cannot be priced."""
+    return _Priced(
+        configured_model_id=priced.configured_model_id,
+        estimate=priced.estimate,
+        baseline_model=priced.baseline_model,
+        baseline_cost=priced.baseline_cost,
+        estimated_savings=None,
+        snapshot=priced.snapshot,
+    )
+
+
+def _call_outcome(
+    *,
+    request_id: object,
+    call: _Call,
+    attempt_number: int,
+    started: float,
+    settings: Settings,
+) -> AttemptOutcome:
+    generated = call.generated
+    usage = None if call.failure is None else call.failure.usage
+    if generated is not None:
+        usage = usage_from_response(generated)
+    priced = call.priced or _empty_price(call.model.model_id)
+    outcome = _outcome(
+        request_id=request_id,
+        status="succeeded" if generated is not None else "failed",
+        provider=call.model.provider.value,
+        configured_model_id=call.model.model_id,
+        reported_model_id=None if generated is None else generated.model,
+        usage=usage,
+        provider_latency_ms=call.latency_ms,
+        priced=priced,
+        error_message=None if call.failure is None else call.failure.message,
+        response_text=None if generated is None else generated.content,
+        started=started,
+        purpose=call.purpose,
+        error_category=None if call.failure is None else call.failure.category.value,
+    )
+    del settings
+    return _replace_attempt(outcome, attempt_number)
+
+
+def _failed_anchor(request_id: object, started: float) -> AttemptOutcome:
+    return _outcome(
+        request_id=request_id,
+        status="failed",
+        provider="unavailable",
+        configured_model_id="unavailable",
+        reported_model_id=None,
+        usage=None,
+        provider_latency_ms=0,
+        priced=_empty_price("unavailable"),
+        error_message="The request deadline was reached.",
+        response_text=None,
+        started=started,
+        purpose="routing",
+        error_category="timeout",
+    )
 
 
 def _log_persistence(request_id: object, exc: Exception) -> None:

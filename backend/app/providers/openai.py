@@ -28,7 +28,7 @@ from app.providers.client import (
 from app.providers.errors import ProviderConfigurationError, ProviderResponseError
 
 DEFAULT_MODEL = "gpt-5-nano"
-DEFAULT_MAX_OUTPUT_TOKENS = 256
+DEFAULT_MAX_OUTPUT_TOKENS = 2048
 DEFAULT_TIMEOUT_SECONDS = 30.0
 _RESPONSES_PATH = "/v1/responses"
 _INCOMPLETE_REASONS = frozenset({"max_output_tokens", "content_filter"})

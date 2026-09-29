@@ -15,6 +15,9 @@ from app.api.schemas import QualityTier
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ENV_FILE = (_REPO_ROOT / ".env").resolve()
+_DOCUMENTED_MODEL_IDS = frozenset(
+    {"gpt-5-nano", "claude-sonnet-4-6", "llama3.2", "gemma4:31b"}
+)
 
 
 def _is_blank(value: object) -> bool:
@@ -71,7 +74,7 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr | None = Field(default=None, repr=False)
     openai_model: str = Field(default="gpt-5-nano", min_length=1)
-    openai_max_output_tokens: int = Field(default=256, ge=1)
+    openai_max_output_tokens: int = Field(default=2048, ge=1)
     openai_timeout_seconds: float = Field(default=30.0, gt=0)
     openai_routing_enabled: bool = True
     openai_quality_tier: QualityTier = QualityTier.LOW
@@ -81,6 +84,7 @@ class Settings(BaseSettings):
     anthropic_timeout_seconds: float = Field(default=30.0, gt=0)
     anthropic_routing_enabled: bool = False
     anthropic_quality_tier: QualityTier = QualityTier.HIGH
+    ollama_api_key: SecretStr | None = Field(default=None, repr=False)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = Field(default="llama3.2", min_length=1)
     ollama_timeout_seconds: float = Field(default=60.0, gt=0)
@@ -100,8 +104,13 @@ class Settings(BaseSettings):
     quality_judge_enabled: bool = False
     quality_judge_model: str = Field(default="gpt-5-nano", min_length=1)
     evaluation_baseline_model: str = Field(default="gpt-5-nano", min_length=1)
+    fallback_enabled: bool = False
+    fallback_models: str = ""
+    max_fallback_attempts: int = Field(default=1, ge=0)
+    request_deadline_seconds: float = Field(default=90.0, gt=0)
+    max_judge_calls: int = Field(default=1, ge=0)
 
-    @field_validator("openai_api_key", "anthropic_api_key", mode="before")
+    @field_validator("openai_api_key", "anthropic_api_key", "ollama_api_key", mode="before")
     @classmethod
     def blank_api_key_is_unset(cls, value: object) -> object:
         if isinstance(value, str) and value.strip() == "":
@@ -120,6 +129,7 @@ class Settings(BaseSettings):
         "escalation_model",
         "evaluation_baseline_model",
         "quality_judge_model",
+        "fallback_models",
         mode="before",
     )
     @classmethod
@@ -128,7 +138,7 @@ class Settings(BaseSettings):
             return value.strip()
         return value
 
-    @field_serializer("openai_api_key", "anthropic_api_key")
+    @field_serializer("openai_api_key", "anthropic_api_key", "ollama_api_key")
     def redact_api_key(self, value: SecretStr | None) -> str | None:
         if value is None:
             return None
@@ -146,7 +156,20 @@ class Settings(BaseSettings):
             raise ValueError(
                 "low_complexity_threshold must be less than high_complexity_threshold"
             )
+        ids = tuple(part.strip() for part in self.fallback_models.split(",") if part.strip())
+        if len(ids) != len(set(ids)):
+            raise ValueError("fallback_models contains a duplicate model id")
+        unknown = [model_id for model_id in ids if model_id not in _DOCUMENTED_MODEL_IDS]
+        if unknown:
+            raise ValueError(
+                "fallback_models contains an unknown model id " f"{unknown[0]!r}"
+            )
         return self
+
+
+def fallback_model_ids(settings: Settings) -> tuple[str, ...]:
+    """Return the configured fallback order. Blank entries are ignored."""
+    return tuple(part.strip() for part in settings.fallback_models.split(",") if part.strip())
 
 
 @lru_cache(maxsize=1)

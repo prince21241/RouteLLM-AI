@@ -63,6 +63,12 @@ class AttemptOutcome:
     final_model_id: str | None = None
     returned_attempt_number: int = 1
     evaluations: tuple["EvaluationWrite", ...] = ()
+    purpose: str = "routing"
+    error_category: str | None = None
+    fallback_used: bool = False
+    fallback_reason: str | None = None
+    fallback_skips: tuple[tuple[str, str], ...] = ()
+    final_provider: str | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +134,8 @@ class StoredAttempt:
     error_message: str | None
     pricing_snapshot: dict[str, object] | None
     created_at: datetime
+    purpose: str | None = None
+    error_category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -181,3 +189,7 @@ class StoredRequest:
     final_model_id: str | None = None
     returned_attempt_number: int | None = None
     evaluations: list[StoredEvaluation] | None = None
+    fallback_used: bool | None = None
+    fallback_reason: str | None = None
+    fallback_skips: list[tuple[str, str]] | None = None
+    final_provider: str | None = None

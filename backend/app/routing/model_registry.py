@@ -42,6 +42,10 @@ class ModelRegistry:
         except KeyError:
             raise UnknownModelError(model_id) from None
 
+    def list_all(self) -> list[ModelConfig]:
+        """Return every model in registration order, including disabled ones."""
+        return list(self._models.values())
+
     def list_enabled(self) -> list[ModelConfig]:
         """Return enabled models in registration order."""
         return [model for model in self._models.values() if model.enabled]

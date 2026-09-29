@@ -26,6 +26,7 @@ def fictional(
     tier: QualityTier,
     *,
     provider: Provider = Provider.OPENAI,
+    enabled: bool = True,
 ) -> ModelConfig:
     return ModelConfig(
         provider=provider,
@@ -35,7 +36,7 @@ def fictional(
         input_cost_per_million_tokens=Decimal("0"),
         output_cost_per_million_tokens=Decimal("0"),
         context_window=1024,
-        enabled=True,
+        enabled=enabled,
         local=False,
     )
 
@@ -240,3 +241,75 @@ def test_health_without_credentials_does_not_enable_models(settings: Settings) -
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_chat_options_list_catalog_models_without_credentials(client: TestClient) -> None:
+    response = client.get("/api/v1/chat/options")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["requests_are_independent"] is True
+    assert body["model_selection_supported"] is False
+    assert body["provider_restriction_supported"] is True
+    assert body["max_input_characters"] == 8000
+    assert "not given this conversation" in body["context_note"]
+    assert body["quality_evaluation"] == {"enabled": False, "per_request_override": False}
+    assert body["escalation"]["enabled"] is False
+    assert body["fallback"]["per_request_override"] is False
+    assert [model["model_id"] for model in body["models"]] == [
+        "gpt-5-nano",
+        "claude-sonnet-4-6",
+        "llama3.2",
+    ]
+    assert all(model["enabled"] is False for model in body["models"])
+    assert _keys(body).isdisjoint({"api_key", "openai_api_key", "anthropic_api_key", "ollama_api_key"})
+
+
+def test_chat_options_reflect_enabled_models_and_server_features() -> None:
+    settings = Settings(
+        _env_file=None,
+        openai_api_key="fictional-openai-key",
+        quality_evaluation_enabled=True,
+        escalation_enabled=True,
+        fallback_enabled=True,
+    )
+
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get("/api/v1/chat/options")
+
+    body = response.json()
+    enabled = {model["model_id"]: model["enabled"] for model in body["models"]}
+    assert enabled["gpt-5-nano"] is True
+    assert enabled["claude-sonnet-4-6"] is False
+    assert enabled["llama3.2"] is False
+    assert body["quality_evaluation"]["enabled"] is True
+    assert body["escalation"]["enabled"] is True
+    assert body["fallback"]["enabled"] is True
+    assert body["model_selection_supported"] is False
+    assert "fictional-openai-key" not in response.text
+
+
+def test_chat_page_keeps_untrusted_output_out_of_html_strings() -> None:
+    with TestClient(create_app(settings=Settings(_env_file=None))) as client:
+        page = client.get("/")
+        script = client.get("/static/app.js")
+
+    assert page.status_code == 200
+    assert 'id="chat-form"' in page.text
+    assert 'id="use-prompt"' in page.text
+    assert 'href="/dashboard"' in page.text
+    assert "innerHTML" not in script.text
+    assert "insertAdjacentHTML" not in script.text
+    assert "document.write" not in script.text
+
+
+def _keys(value: object) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            found.add(str(key))
+            found.update(_keys(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.update(_keys(item))
+    return found

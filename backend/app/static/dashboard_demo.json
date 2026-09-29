@@ -1,0 +1,145 @@
+{
+  "label": "Demo data. This is not your database.",
+  "overview": {
+    "timezone": "UTC",
+    "request_count": 2,
+    "attempt_count": 3,
+    "error_rate": "0.5",
+    "escalation_rate": "0",
+    "fallback_rate": "1",
+    "request_latency_ms": { "p50": 40, "average": 40, "known_count": 1, "missing_count": 1 },
+    "attempt_latency_ms": { "p50": 20, "average": 20, "known_count": 2, "missing_count": 1 },
+    "request_cost": { "complete": null, "estimated": "0.01", "unknown_count": 1 },
+    "judge_cost": { "complete": "0.005", "unknown_count": 0 },
+    "savings_estimate": "0.02",
+    "savings_basis": "same_token_volume",
+    "by_day": [
+      { "day": "2026-09-28", "requests": 1, "complete": null, "estimated": "0.01", "unknown_count": 0 },
+      { "day": "2026-09-29", "requests": 1, "complete": null, "estimated": null, "unknown_count": 1 }
+    ],
+    "notes": [
+      "Demo data. Counts are stored chat requests in this fixture, not a live database.",
+      "Unknown costs are omitted from the sums."
+    ]
+  },
+  "breakdown": {
+    "models": [
+      {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-6",
+        "attempt_count": 1,
+        "request_count": 1,
+        "failed_attempts": 0,
+        "cost_complete": "0.2",
+        "cost_estimated": null,
+        "cost_unknown_attempts": 0,
+        "latency_p50_ms": 30,
+        "latency_known_attempts": 1,
+        "latency_missing_attempts": 0
+      },
+      {
+        "provider": "openai",
+        "model": "gpt-5-nano",
+        "attempt_count": 2,
+        "request_count": 2,
+        "failed_attempts": 1,
+        "cost_complete": "0",
+        "cost_estimated": null,
+        "cost_unknown_attempts": 1,
+        "latency_p50_ms": 10,
+        "latency_known_attempts": 1,
+        "latency_missing_attempts": 1
+      }
+    ],
+    "judges": [
+      {
+        "judge_model": "gpt-5-nano",
+        "evaluations": 1,
+        "cost_complete": "0.005",
+        "cost_estimated": null,
+        "cost_unknown_evaluations": 0
+      }
+    ],
+    "notes": ["Demo breakdown. Attempt costs stay on the model that ran the attempt."]
+  },
+  "history": {
+    "items": [
+      {
+        "request_id": "11111111-1111-4111-8111-111111111111",
+        "created_at": "2026-09-29T12:00:00Z",
+        "status": "succeeded",
+        "provider": "openai",
+        "model": "gpt-5-nano",
+        "final_provider": "anthropic",
+        "final_model": "claude-sonnet-4-6",
+        "prompt_preview": "<script>alert(1)</script> Explain an API",
+        "prompt_truncated": true,
+        "total_cost": null,
+        "cost_completeness": "unknown",
+        "estimated_savings": null,
+        "end_to_end_latency_ms": 40,
+        "quality_verdict": null,
+        "escalated": false,
+        "fallback_used": true,
+        "attempt_count": 2
+      }
+    ]
+  },
+  "detail": {
+    "request_id": "11111111-1111-4111-8111-111111111111",
+    "prompt": "<script>alert(1)</script> Explain what an API is in two sentences",
+    "system_prompt": null,
+    "created_at": "2026-09-29T12:00:00Z",
+    "completed_at": "2026-09-29T12:00:01Z",
+    "status": "succeeded",
+    "provider": "openai",
+    "model": "gpt-5-nano",
+    "final_provider": "anthropic",
+    "final_model": "claude-sonnet-4-6",
+    "escalated": false,
+    "escalation_reason": null,
+    "escalation_error": null,
+    "fallback_used": true,
+    "fallback_reason": "timeout",
+    "fallback_skips": [{ "model_id": "llama3.2", "reason": "not enabled" }],
+    "quality_verdict": null,
+    "quality_reasons": [],
+    "total_cost": null,
+    "cost_completeness": "unknown",
+    "estimated_savings": null,
+    "savings_basis": "same_token_volume",
+    "end_to_end_latency_ms": 40,
+    "response": "An API is a contract between two programs.",
+    "attempts": [
+      {
+        "attempt_number": 2,
+        "purpose": "fallback",
+        "provider": "anthropic",
+        "configured_model_id": "claude-sonnet-4-6",
+        "status": "succeeded",
+        "input_tokens": 14,
+        "output_tokens": 20,
+        "estimated_cost": "0.2",
+        "cost_completeness": "complete",
+        "provider_latency_ms": 30,
+        "error_category": null,
+        "error_message": null
+      },
+      {
+        "attempt_number": 1,
+        "purpose": "routing",
+        "provider": "openai",
+        "configured_model_id": "gpt-5-nano",
+        "status": "failed",
+        "input_tokens": null,
+        "output_tokens": null,
+        "estimated_cost": null,
+        "cost_completeness": "unknown",
+        "provider_latency_ms": 10,
+        "error_category": "timeout",
+        "error_message": "upstream timeout"
+      }
+    ],
+    "evaluations": []
+  }
+}

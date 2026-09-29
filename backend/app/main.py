@@ -3,14 +3,17 @@
 import logging
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import __version__
 from app.api.chat import register_chat_route
+from app.api.dashboard import register_dashboard_routes
 from app.api.history import register_history_routes
 from app.api.schemas import ModelConfig
 from app.chat.service import ChatService
@@ -25,6 +28,7 @@ from app.routing.model_registry import ModelRegistry
 from app.routing.router import ModelRouter, parse_preference
 
 logger = logging.getLogger("app.ready")
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 class HealthResponse(BaseModel):
@@ -92,6 +96,16 @@ def create_app(
     )
     register_chat_route(app, service)
     register_history_routes(app)
+    register_dashboard_routes(app)
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+    @app.get("/")
+    def home() -> FileResponse:
+        return FileResponse(_STATIC_DIR / "index.html")
+
+    @app.get("/dashboard")
+    def dashboard() -> FileResponse:
+        return FileResponse(_STATIC_DIR / "dashboard.html")
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:

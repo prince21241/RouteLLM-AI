@@ -7,13 +7,70 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas import Provider, QualityTier
 
 
+class ServerFeature(BaseModel):
+    """A behavior controlled by server settings, not by the chat form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    per_request_override: Literal[False] = False
+
+
+class ChatModelChoice(BaseModel):
+    """One catalog model. Enabled means the server can route to it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str = Field(min_length=1)
+    model_name: str = Field(min_length=1)
+    provider: Provider
+    quality_tier: QualityTier
+    enabled: bool
+    local: bool
+
+
+class ChatOptionsResponse(BaseModel):
+    """Routing choices the chat page may offer. Credentials are omitted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    requests_are_independent: Literal[True] = True
+    max_input_characters: int = Field(ge=1)
+    context_note: str = (
+        "Each send is a new request. Earlier messages are not included, "
+        "and the model is not given this conversation. The character limit "
+        "covers the user prompt and system prompt together. It is not a "
+        "model context window."
+    )
+    model_selection_supported: Literal[False] = False
+    provider_restriction_supported: Literal[True] = True
+    models: list[ChatModelChoice]
+    quality_evaluation: ServerFeature
+    escalation: ServerFeature
+    fallback: ServerFeature
+
+
 class ChatRequest(BaseModel):
-    """One chat turn. Blank prompts are rejected by the chat service."""
+    """One chat turn. Blank prompts are rejected by the chat service.
+
+    ``provider`` limits routing and fallback to that provider. Omit it to
+    allow the router to choose any enabled provider.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     prompt: str
     system_prompt: str | None = None
+    provider: Provider | None = None
+
+
+class FallbackSkip(BaseModel):
+    """A configured fallback model that was not called."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str
+    reason: str
 
 
 class RoutingDetails(BaseModel):
@@ -83,3 +140,7 @@ class ChatResponse(BaseModel):
     escalation_error: str | None = None
     returned_model: str | None = None
     returned_attempt: int = Field(default=1, ge=1)
+    fallback_used: bool = False
+    fallback_reason: str | None = None
+    fallback_skips: list[FallbackSkip] = Field(default_factory=list)
+    final_provider: str | None = None

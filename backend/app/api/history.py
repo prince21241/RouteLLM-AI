@@ -53,6 +53,11 @@ def register_history_routes(app: FastAPI) -> None:
         return _detail(row)
 
 
+def serialize_request(row: StoredRequest) -> RequestDetailResponse:
+    """Build the history detail response for one stored request."""
+    return _detail(row)
+
+
 def _store(app: FastAPI) -> RequestStore:
     store = getattr(app.state, "store", None)
     if store is None:
@@ -121,6 +126,13 @@ def _detail(row: StoredRequest) -> RequestDetailResponse:
         final_model=row.final_model_id,
         returned_attempt=row.returned_attempt_number,
         evaluations=[_evaluation(item) for item in (row.evaluations or [])],
+        fallback_used=row.fallback_used,
+        fallback_reason=row.fallback_reason,
+        fallback_skips=[
+            {"model_id": model_id, "reason": reason}
+            for model_id, reason in (row.fallback_skips or [])
+        ],
+        final_provider=row.final_provider,
     )
 
 
@@ -145,6 +157,8 @@ def _attempt(row: StoredAttempt) -> AttemptResponse:
         error_message=row.error_message,
         pricing_snapshot=row.pricing_snapshot,
         created_at=row.created_at,
+        purpose=row.purpose,
+        error_category=row.error_category,
     )
 
 
