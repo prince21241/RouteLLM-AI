@@ -36,6 +36,12 @@ def test_defaults(settings: Settings) -> None:
     assert settings.max_model_attempts == 3
     assert settings.database_url is None
     assert settings.premium_baseline_model == "claude-sonnet-4-6"
+    assert settings.quality_evaluation_enabled is False
+    assert settings.escalation_enabled is False
+    assert settings.escalation_model == ""
+    assert settings.quality_judge_enabled is False
+    assert settings.quality_judge_model == "gpt-5-nano"
+    assert settings.evaluation_baseline_model == "gpt-5-nano"
 
 
 def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

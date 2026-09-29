@@ -10,8 +10,16 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from app.db.models import AttemptRow, RequestRow
-from app.db.records import AttemptOutcome, PendingRequest, StoredAttempt, StoredRequest, StoredSummary
+from app.db.models import AttemptRow, EvaluationRow, RequestRow
+from app.db.records import (
+    AttemptOutcome,
+    EvaluationWrite,
+    PendingRequest,
+    StoredAttempt,
+    StoredEvaluation,
+    StoredRequest,
+    StoredSummary,
+)
 from app.pricing.service import CostCompleteness
 
 
@@ -66,6 +74,26 @@ class RequestStore:
         """Store a failed attempt. Unknown costs stay null."""
         await self._finish(outcome)
 
+    async def save_attempt(self, outcome: AttemptOutcome) -> None:
+        """Insert one attempt without closing the request."""
+        async with self._sessions() as session:
+            async with session.begin():
+                request = await session.get(RequestRow, outcome.request_id)
+                if request is None:
+                    raise LookupError("request row is missing")
+                session.add(_attempt(outcome))
+
+    async def finalize_request(self, outcome: AttemptOutcome) -> None:
+        """Write the final request fields and any evaluation rows."""
+        async with self._sessions() as session:
+            async with session.begin():
+                request = await session.get(RequestRow, outcome.request_id)
+                if request is None:
+                    raise LookupError("request row is missing")
+                _apply_final(request, outcome)
+                for evaluation in outcome.evaluations:
+                    session.add(_evaluation(outcome.request_id, evaluation))
+
     async def list_requests(self, *, limit: int, offset: int) -> tuple[list[StoredSummary], int]:
         """Return newest requests first. ``id`` breaks timestamp ties."""
         async with self._sessions() as session:
@@ -87,7 +115,10 @@ class RequestStore:
             row = await session.scalar(
                 select(RequestRow)
                 .where(RequestRow.id == request_id)
-                .options(selectinload(RequestRow.attempts))
+                .options(
+                    selectinload(RequestRow.attempts),
+                    selectinload(RequestRow.evaluations),
+                )
             )
             if row is None:
                 return None
@@ -99,24 +130,59 @@ class RequestStore:
                 request = await session.get(RequestRow, outcome.request_id)
                 if request is None:
                     raise LookupError("request row is missing")
-                request.status = outcome.status
-                request.updated_at = outcome.completed_at
-                request.completed_at = outcome.completed_at
-                request.response_text = outcome.response_text
-                request.total_cost = outcome.total_cost
-                request.cost_completeness = outcome.cost_completeness
-                request.end_to_end_latency_ms = outcome.end_to_end_latency_ms
-                request.premium_baseline_model = outcome.premium_baseline_model
-                request.premium_baseline_cost = outcome.premium_baseline_cost
-                request.estimated_savings = outcome.estimated_savings
+                _apply_final(request, outcome)
                 session.add(_attempt(outcome))
+                for evaluation in outcome.evaluations:
+                    session.add(_evaluation(outcome.request_id, evaluation))
+
+
+def _apply_final(request: RequestRow, outcome: AttemptOutcome) -> None:
+    request.status = outcome.status
+    request.updated_at = outcome.completed_at
+    request.completed_at = outcome.completed_at
+    request.response_text = outcome.response_text
+    request.total_cost = outcome.total_cost
+    request.cost_completeness = outcome.cost_completeness
+    request.end_to_end_latency_ms = outcome.end_to_end_latency_ms
+    request.premium_baseline_model = outcome.premium_baseline_model
+    request.premium_baseline_cost = outcome.premium_baseline_cost
+    request.estimated_savings = outcome.estimated_savings
+    request.escalated = outcome.escalated
+    request.quality_verdict = outcome.quality_verdict
+    request.quality_score = outcome.quality_score
+    request.quality_reasons = outcome.quality_reasons
+    request.escalation_reason = outcome.escalation_reason
+    request.escalation_error = outcome.escalation_error
+    request.final_model_id = outcome.final_model_id
+    request.returned_attempt_number = outcome.returned_attempt_number
+
+
+def _evaluation(request_id: uuid.UUID, evaluation: EvaluationWrite) -> EvaluationRow:
+    return EvaluationRow(
+        id=uuid.uuid4(),
+        request_id=request_id,
+        attempt_number=evaluation.attempt_number,
+        source=evaluation.source,
+        method=evaluation.method,
+        verdict=evaluation.verdict,
+        score=evaluation.score,
+        reasons=list(evaluation.reasons),
+        judge_model=evaluation.judge_model,
+        judge_input_tokens=evaluation.judge_input_tokens,
+        judge_output_tokens=evaluation.judge_output_tokens,
+        judge_cost=evaluation.judge_cost,
+        judge_cost_completeness=evaluation.judge_cost_completeness,
+        judge_latency_ms=evaluation.judge_latency_ms,
+        error_message=evaluation.error_message,
+        created_at=evaluation.created_at,
+    )
 
 
 def _attempt(outcome: AttemptOutcome) -> AttemptRow:
     return AttemptRow(
         id=uuid.uuid4(),
         request_id=outcome.request_id,
-        attempt_number=1,
+        attempt_number=outcome.attempt_number,
         provider=outcome.provider,
         configured_model_id=outcome.configured_model_id,
         reported_model_id=outcome.reported_model_id,
@@ -178,6 +244,14 @@ def _detail(row: RequestRow) -> StoredRequest:
         premium_baseline_cost=row.premium_baseline_cost,
         estimated_savings=row.estimated_savings,
         attempts=[_stored_attempt(attempt) for attempt in row.attempts],
+        quality_verdict=row.quality_verdict,
+        quality_score=row.quality_score,
+        quality_reasons=None if row.quality_reasons is None else list(row.quality_reasons),
+        escalation_reason=row.escalation_reason,
+        escalation_error=row.escalation_error,
+        final_model_id=row.final_model_id,
+        returned_attempt_number=row.returned_attempt_number,
+        evaluations=[_stored_evaluation(item) for item in row.evaluations],
     )
 
 
@@ -202,5 +276,24 @@ def _stored_attempt(row: AttemptRow) -> StoredAttempt:
         cost_completeness=row.cost_completeness,
         error_message=row.error_message,
         pricing_snapshot=dict(snapshot) if isinstance(snapshot, dict) else None,
+        created_at=row.created_at,
+    )
+
+
+def _stored_evaluation(row: EvaluationRow) -> StoredEvaluation:
+    return StoredEvaluation(
+        attempt_number=row.attempt_number,
+        source=row.source,
+        method=row.method,
+        verdict=row.verdict,
+        score=row.score,
+        reasons=list(row.reasons),
+        judge_model=row.judge_model,
+        judge_input_tokens=row.judge_input_tokens,
+        judge_output_tokens=row.judge_output_tokens,
+        judge_cost=row.judge_cost,
+        judge_cost_completeness=row.judge_cost_completeness,
+        judge_latency_ms=row.judge_latency_ms,
+        error_message=row.error_message,
         created_at=row.created_at,
     )

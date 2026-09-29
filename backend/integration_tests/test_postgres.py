@@ -81,6 +81,7 @@ def store(database_url: str):
 
     async def clean() -> None:
         async with engine.begin() as connection:
+            await connection.execute(text("DELETE FROM evaluations"))
             await connection.execute(text("DELETE FROM attempts"))
             await connection.execute(text("DELETE FROM requests"))
 
@@ -101,17 +102,24 @@ def test_migrations_create_request_tables(store) -> None:
                 )
             )
             names = {row[0] for row in rows}
+            verdict = await connection.scalar(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'requests' AND column_name = 'quality_verdict'"
+                )
+            )
             cost_type = await connection.scalar(
                 text(
                     "SELECT data_type FROM information_schema.columns "
                     "WHERE table_name = 'requests' AND column_name = 'total_cost'"
                 )
             )
-        return names, cost_type
+        return names, cost_type, verdict
 
-    names, cost_type = asyncio.run(table_names())
-    assert {"requests", "attempts", "alembic_version"} <= names
+    names, cost_type, verdict = asyncio.run(table_names())
+    assert {"requests", "attempts", "evaluations", "alembic_version"} <= names
     assert cost_type == "numeric"
+    assert verdict == "quality_verdict"
 
 
 def test_success_is_persisted_with_its_attempt(store) -> None:

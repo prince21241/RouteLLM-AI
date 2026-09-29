@@ -43,6 +43,7 @@ def create_app(
     router: ModelRouter | None = None,
     provider_factory: Callable[[ModelConfig], LLMProvider] | None = None,
     store: RequestStore | None = None,
+    evaluator: object | None = None,
 ) -> FastAPI:
     """Build the API.
 
@@ -87,6 +88,7 @@ def create_app(
         resolved_router,
         resolved_factory,
         store=resolved_store,
+        evaluator=evaluator,
     )
     register_chat_route(app, service)
     register_history_routes(app)

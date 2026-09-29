@@ -274,6 +274,24 @@ def _finished(
     )
 
 
+def combine_costs(estimates: list[CostEstimate]) -> CostEstimate:
+    """Sum known costs. Any unknown part makes the total unknown.
+
+    A missing total is not replaced with zero. An empty list is unknown.
+    """
+    if not estimates or any(
+        item.total is None or item.completeness is CostCompleteness.UNKNOWN for item in estimates
+    ):
+        return CostEstimate(total=None, completeness=CostCompleteness.UNKNOWN)
+    total = quantize_money(sum((item.total for item in estimates), Decimal("0")))
+    completeness = (
+        CostCompleteness.ESTIMATED
+        if any(item.completeness is CostCompleteness.ESTIMATED for item in estimates)
+        else CostCompleteness.COMPLETE
+    )
+    return CostEstimate(total=total, completeness=completeness)
+
+
 def _is_zero(metadata: VerifiedModelMetadata) -> bool:
     return (
         metadata.input_cost_per_million_tokens == 0

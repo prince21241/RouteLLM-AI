@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     max_model_attempts: int = Field(default=3, ge=1)
     database_url: str | None = Field(default=None, repr=False)
     premium_baseline_model: str = "claude-sonnet-4-6"
+    quality_evaluation_enabled: bool = False
+    escalation_enabled: bool = False
+    escalation_model: str = ""
+    quality_judge_enabled: bool = False
+    quality_judge_model: str = Field(default="gpt-5-nano", min_length=1)
+    evaluation_baseline_model: str = Field(default="gpt-5-nano", min_length=1)
 
     @field_validator("openai_api_key", "anthropic_api_key", mode="before")
     @classmethod
@@ -109,9 +115,15 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("premium_baseline_model", mode="before")
+    @field_validator(
+        "premium_baseline_model",
+        "escalation_model",
+        "evaluation_baseline_model",
+        "quality_judge_model",
+        mode="before",
+    )
     @classmethod
-    def strip_baseline_model(cls, value: object) -> object:
+    def strip_model_setting(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip()
         return value

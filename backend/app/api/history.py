@@ -8,11 +8,12 @@ from fastapi import FastAPI, HTTPException, Query
 
 from app.api.history_schemas import (
     AttemptResponse,
+    EvaluationResponse,
     RequestDetailResponse,
     RequestListResponse,
     RequestSummaryResponse,
 )
-from app.db.records import StoredAttempt, StoredRequest, StoredSummary
+from app.db.records import StoredAttempt, StoredEvaluation, StoredRequest, StoredSummary
 from app.db.store import RequestStore
 from app.pricing.money import money_to_api
 
@@ -112,6 +113,14 @@ def _detail(row: StoredRequest) -> RequestDetailResponse:
         estimated_savings=money_to_api(row.estimated_savings),
         savings_basis="same_token_volume",
         attempts=[_attempt(attempt) for attempt in row.attempts],
+        quality_verdict=row.quality_verdict,
+        quality_score=None if row.quality_score is None else float(row.quality_score),
+        quality_reasons=list(row.quality_reasons or []),
+        escalation_reason=row.escalation_reason,
+        escalation_error=row.escalation_error,
+        final_model=row.final_model_id,
+        returned_attempt=row.returned_attempt_number,
+        evaluations=[_evaluation(item) for item in (row.evaluations or [])],
     )
 
 
@@ -135,6 +144,25 @@ def _attempt(row: StoredAttempt) -> AttemptResponse:
         cost_completeness=row.cost_completeness,
         error_message=row.error_message,
         pricing_snapshot=row.pricing_snapshot,
+        created_at=row.created_at,
+    )
+
+
+def _evaluation(row: StoredEvaluation) -> EvaluationResponse:
+    return EvaluationResponse(
+        attempt_number=row.attempt_number,
+        source=row.source,
+        method=row.method,
+        verdict=row.verdict,
+        score=None if row.score is None else float(row.score),
+        reasons=list(row.reasons),
+        judge_model=row.judge_model,
+        judge_input_tokens=row.judge_input_tokens,
+        judge_output_tokens=row.judge_output_tokens,
+        judge_cost=money_to_api(row.judge_cost),
+        judge_cost_completeness=row.judge_cost_completeness,
+        judge_latency_ms=_latency(row.judge_latency_ms),
+        error_message=row.error_message,
         created_at=row.created_at,
     )
 

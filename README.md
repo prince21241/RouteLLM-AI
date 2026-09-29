@@ -6,9 +6,11 @@ Phase 2 adds non-streaming text clients for OpenAI, Anthropic, and Ollama. Each 
 
 Phase 3 adds a rule-based complexity heuristic, deterministic model selection, and `POST /api/v1/chat`.
 
-Phase 4 adds a pricing service, PostgreSQL persistence, request history, and a same-token-volume savings estimate. Quality evaluation, escalation, runtime provider fallback, dashboard endpoints, the frontend, and ML are later phases.
+Phase 4 adds a pricing service, PostgreSQL persistence, request history, and a same-token-volume savings estimate.
 
-The API still starts and serves `/health` when provider credentials and `DATABASE_URL` are missing. A provider reports missing configuration only when that provider is used. If generation fails, the request stops. The router does not call another provider. Phase 4 still makes one provider call per request. `/health` does not touch the database. `/ready` does.
+Phase 5 adds a versioned evaluation dataset, an offline or paid baseline runner, and optional quality checks. Quality checking and escalation are off by default, so a normal chat still makes one provider call. When both are enabled, a failed check may call one stronger model. There is no provider retry and no provider fallback. Dashboard endpoints, the frontend, and ML routing are later phases.
+
+The API still starts and serves `/health` when provider credentials and `DATABASE_URL` are missing. A provider reports missing configuration only when that provider is used. If the first generation fails, the request stops. The router does not call another provider unless escalation is enabled and the initial answer fails a quality check. `/health` does not touch the database. `/ready` does.
 
 All commands below use `backend` as the working directory.
 
@@ -190,7 +192,7 @@ python -m alembic upgrade head
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-`python -m alembic upgrade head` used to raise `DATABASE_URL is not configured` even when the repository-root `.env` defined it. Alembic now loads that URL through the same settings object as the API. The env file path is the absolute repository-root `.env`, not a path relative to the shell’s current directory. A blank or whitespace-only `DATABASE_URL` in the process environment is ignored, so it no longer hides the value in `.env`. A non-blank process value, or an explicit Alembic `sqlalchemy.url`, still wins. That keeps integration tests on their disposable database. The missing-URL error names the env file path and does not include the URL. Uvicorn does not reload when `.env` changes; restart the API after editing it.
+`python -m alembic upgrade head` applies `20260929_0002` after the Phase 4 tables. That migration adds quality columns on `requests` and an `evaluations` table. Existing rows stay valid because the new columns are nullable. Alembic loads `DATABASE_URL` through the same settings object as the API, using the absolute repository-root `.env`. A blank or whitespace-only process value does not hide the file. A non-blank process value, or an explicit Alembic `sqlalchemy.url`, still wins. The missing-URL error names the env file path and does not include the URL.
 
 Health check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
@@ -230,6 +232,40 @@ History does not require a body:
 `GET http://127.0.0.1:8000/api/v1/requests/{request_id}`
 
 Use the `request_id` from the chat response. A missing id returns 404. The list is newest first and does not include the prompt or the response text. `limit` must be from 1 to 100 and `offset` must be 0 or greater.
+
+## Quality evaluation and escalation
+
+Quality checks and escalation stay off until `QUALITY_EVALUATION_ENABLED` and `ESCALATION_ENABLED` are true. Restart the API after changing `.env`. Uvicorn does not reload environment files.
+
+| Variable | Default | Role |
+| --- | --- | --- |
+| `QUALITY_EVALUATION_ENABLED` | `false` | Score the initial answer. Live checks have no reference answer. |
+| `QUALITY_JUDGE_ENABLED` | `false` | Ask OpenAI to judge open-ended live answers. Anthropic is not required. |
+| `QUALITY_JUDGE_MODEL` | `gpt-5-nano` | Judge model sent to OpenAI. |
+| `MIN_QUALITY_SCORE` | `0.75` | A passing judge score below this becomes a failure. A missing score does not. |
+| `ESCALATION_ENABLED` | `false` | After an explicit `fail`, allow one more generation. |
+| `ESCALATION_MODEL` | empty | Model id to call. Empty uses the next higher configured quality tier. Price is not used. |
+| `EVALUATION_BASELINE_MODEL` | `gpt-5-nano` | Model the evaluation CLI compares with the router. This call is separate from the same-token-volume savings estimate. |
+
+`ESCALATION_MODEL` must differ from the model that just answered. An id in the registry is used only when that model is enabled. An id that is not in the registry is sent to OpenAI when `OPENAI_API_KEY` is set, and its cost stays unknown. If no eligible model exists, the original answer is returned and `escalation_error` explains why. A failed second call also keeps the original answer.
+
+Chat `metrics.cost` adds every generation attempt and any judge call. An unknown component makes the total unknown; it is not stored as zero. `estimated_savings` stays `same_token_volume`: the configured premium model's price applied to the returned answer's tokens, minus that answer's own generation cost. It is not a measured comparison against a baseline run. Negative savings remain possible.
+
+The dataset is `backend/app/evaluation/datasets/v1.json`, version `2026-09-29.1`. Cases are `calibration` or `held_out` and cover factual, reasoning, math, coding, structured, and instruction prompts. `exact`, `numeric`, and `json_fields` use reference answers. `--mock` marks rubric cases failed with an offline placeholder judge. That failure means no model graded the rubric. It is not a quality score. Answer length, keyword overlap, and self-reported confidence are not grades. Dataset grading can use reference answers. Live chat grading cannot.
+
+From `backend`:
+
+```powershell
+python -m pytest
+python -m app.evaluation --mock --smoke
+python -m app.evaluation --mock
+python -m app.evaluation --execute --smoke
+python -m app.evaluation --execute --output evaluation-results.json
+```
+
+`--mock` does not call a provider. `--execute` does, and it can spend money. The command prints a summary and JSON. Failures and unknowns stay in the case list. `measured_cost_difference` is the baseline run's actual cost minus the router run's actual cost, or unknown when either side is unknown. Evaluation runs are not written to chat history.
+
+Alembic still reads `DATABASE_URL` through the application settings loader. A blank process value does not hide the repository-root `.env`.
 
 ## Run the tests
 

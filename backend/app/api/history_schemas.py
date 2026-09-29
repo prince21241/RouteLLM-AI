@@ -88,3 +88,35 @@ class RequestDetailResponse(BaseModel):
     estimated_savings: str | None
     savings_basis: str
     attempts: list[AttemptResponse]
+    quality_verdict: str | None = None
+    quality_score: float | None = None
+    quality_reasons: list[str] = Field(default_factory=list)
+    escalation_reason: str | None = None
+    escalation_error: str | None = None
+    final_model: str | None = None
+    returned_attempt: int | None = None
+    evaluations: list["EvaluationResponse"] = Field(default_factory=list)
+
+
+class EvaluationResponse(BaseModel):
+    """One stored quality check, including a judge call when one ran."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt_number: int = Field(ge=1)
+    source: str
+    method: str
+    verdict: str
+    score: float | None
+    reasons: list[str]
+    judge_model: str | None
+    judge_input_tokens: int | None
+    judge_output_tokens: int | None
+    judge_cost: str | None
+    judge_cost_completeness: str | None
+    judge_latency_ms: float | None
+    error_message: str | None
+    created_at: datetime
+
+
+RequestDetailResponse.model_rebuild()

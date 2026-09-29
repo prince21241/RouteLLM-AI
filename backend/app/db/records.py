@@ -53,6 +53,56 @@ class AttemptOutcome:
     premium_baseline_model: str | None
     premium_baseline_cost: Decimal | None
     estimated_savings: Decimal | None
+    attempt_number: int = 1
+    escalated: bool = False
+    quality_verdict: str | None = None
+    quality_score: Decimal | None = None
+    quality_reasons: list[str] | None = None
+    escalation_reason: str | None = None
+    escalation_error: str | None = None
+    final_model_id: str | None = None
+    returned_attempt_number: int = 1
+    evaluations: tuple["EvaluationWrite", ...] = ()
+
+
+@dataclass(frozen=True)
+class EvaluationWrite:
+    """A quality result stored with the request that produced the answer."""
+
+    attempt_number: int
+    source: str
+    method: str
+    verdict: str
+    score: Decimal | None
+    reasons: list[str]
+    judge_model: str | None
+    judge_input_tokens: int | None
+    judge_output_tokens: int | None
+    judge_cost: Decimal | None
+    judge_cost_completeness: str | None
+    judge_latency_ms: Decimal | None
+    error_message: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class StoredEvaluation:
+    """One quality result read back from the database."""
+
+    attempt_number: int
+    source: str
+    method: str
+    verdict: str
+    score: Decimal | None
+    reasons: list[str]
+    judge_model: str | None
+    judge_input_tokens: int | None
+    judge_output_tokens: int | None
+    judge_cost: Decimal | None
+    judge_cost_completeness: str | None
+    judge_latency_ms: Decimal | None
+    error_message: str | None
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -123,3 +173,11 @@ class StoredRequest:
     premium_baseline_cost: Decimal | None
     estimated_savings: Decimal | None
     attempts: list[StoredAttempt]
+    quality_verdict: str | None = None
+    quality_score: Decimal | None = None
+    quality_reasons: list[str] | None = None
+    escalation_reason: str | None = None
+    escalation_error: str | None = None
+    final_model_id: str | None = None
+    returned_attempt_number: int | None = None
+    evaluations: list[StoredEvaluation] | None = None
