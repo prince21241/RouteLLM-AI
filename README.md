@@ -190,6 +190,8 @@ python -m alembic upgrade head
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
+`python -m alembic upgrade head` used to raise `DATABASE_URL is not configured` even when the repository-root `.env` defined it. Alembic now loads that URL through the same settings object as the API. The env file path is the absolute repository-root `.env`, not a path relative to the shell’s current directory. A blank or whitespace-only `DATABASE_URL` in the process environment is ignored, so it no longer hides the value in `.env`. A non-blank process value, or an explicit Alembic `sqlalchemy.url`, still wins. That keeps integration tests on their disposable database. The missing-URL error names the env file path and does not include the URL. Uvicorn does not reload when `.env` changes; restart the API after editing it.
+
 Health check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
 Readiness check: [http://127.0.0.1:8000/ready](http://127.0.0.1:8000/ready)

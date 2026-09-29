@@ -1,10 +1,12 @@
 """Settings defaults, environment overrides, and validation."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from app.api.schemas import QualityTier
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, migration_database_url
 from app.main import create_app
 
 
@@ -145,6 +147,63 @@ def test_invalid_settings(overrides: dict[str, float | int]) -> None:
 def test_invalid_provider_settings(overrides: dict[str, float | int | str]) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **overrides)
+
+
+def test_blank_environment_does_not_hide_env_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty or whitespace DATABASE_URL must not override the env file."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DATABASE_URL=postgresql+asyncpg://db.example/routellm\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DATABASE_URL", "")
+
+    from_empty = Settings(_env_file=env_file)
+
+    monkeypatch.setenv("DATABASE_URL", "   ")
+    from_whitespace = Settings(_env_file=env_file)
+
+    assert from_empty.database_url == "postgresql+asyncpg://db.example/routellm"
+    assert from_whitespace.database_url == "postgresql+asyncpg://db.example/routellm"
+    assert migration_database_url("", from_empty) == "postgresql+asyncpg://db.example/routellm"
+    assert migration_database_url("   ", from_whitespace) == "postgresql+asyncpg://db.example/routellm"
+
+
+def test_process_environment_still_overrides_env_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DATABASE_URL=postgresql+asyncpg://db.example/from-file\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://db.example/from-env")
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.database_url == "postgresql+asyncpg://db.example/from-env"
+    assert (
+        migration_database_url("postgresql+asyncpg://db.example/explicit", settings)
+        == "postgresql+asyncpg://db.example/explicit"
+    )
+
+
+def test_settings_env_file_is_the_absolute_repository_root() -> None:
+    from app import config as config_module
+
+    expected = Path(config_module.__file__).resolve().parents[2] / ".env"
+
+    assert config_module._ENV_FILE.is_absolute()
+    assert config_module._ENV_FILE == expected.resolve()
+
+
+def test_migration_url_requires_configuration() -> None:
+    with pytest.raises(RuntimeError, match="DATABASE_URL is not configured"):
+        migration_database_url(None, Settings(_env_file=None))
 
 
 def test_invalid_thresholds_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,6 +7,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.config import get_settings, migration_database_url
 from app.db.models import Base
 
 config = context.config
@@ -17,15 +18,13 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    configured = config.get_main_option("sqlalchemy.url")
-    if configured:
-        return configured
-    from app.config import get_settings
+    """Use an explicit Alembic URL, otherwise the application settings.
 
-    url = get_settings().database_url
-    if not url:
-        raise RuntimeError("DATABASE_URL is not configured")
-    return url
+    ``get_settings`` is cleared first so a blank shell variable cannot reuse
+    a settings object loaded before the repository-root ``.env`` was read.
+    """
+    get_settings.cache_clear()
+    return migration_database_url(config.get_main_option("sqlalchemy.url"))
 
 
 def run_migrations_offline() -> None:

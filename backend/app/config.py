@@ -14,14 +14,35 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.api.schemas import QualityTier
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_ENV_FILE = _REPO_ROOT / ".env"
+_ENV_FILE = (_REPO_ROOT / ".env").resolve()
+
+
+def _is_blank(value: object) -> bool:
+    """Return whether a settings value is empty or only whitespace."""
+    return isinstance(value, str) and value.strip() == ""
+
+
+class _SkipBlankEnv:
+    """Drop blank process environment values so the env file can supply them.
+
+    Pydantic settings prefer process environment variables over ``.env``.
+    An empty ``DATABASE_URL`` in the shell would otherwise hide the file.
+    """
+
+    def __init__(self, inner: object) -> None:
+        self._inner = inner
+
+    def __call__(self) -> dict[str, object]:
+        loaded = self._inner()
+        return {key: value for key, value in loaded.items() if not _is_blank(value)}
 
 
 class Settings(BaseSettings):
     """Runtime configuration from the process environment and the repo-root ``.env``.
 
     Provider clients are created by callers, not while settings load. Missing
-    API keys stay empty so ``/health`` can run.
+    API keys stay empty so ``/health`` can run. A blank process environment
+    value does not override the same name in the repository-root ``.env``.
     """
 
     model_config = SettingsConfigDict(
@@ -29,7 +50,24 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         frozen=True,
+        env_ignore_empty=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: object,
+        env_settings: object,
+        dotenv_settings: object,
+        file_secret_settings: object,
+    ) -> tuple[object, ...]:
+        return (
+            init_settings,
+            _SkipBlankEnv(env_settings),
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     openai_api_key: SecretStr | None = Field(default=None, repr=False)
     openai_model: str = Field(default="gpt-5-nano", min_length=1)
@@ -105,5 +143,28 @@ def get_settings() -> Settings:
 
     Pass a ``Settings`` instance to ``create_app`` in tests. After changing
     environment variables in-process, call ``get_settings.cache_clear()``.
+    The env file is the absolute repository-root ``.env``.
     """
     return Settings()
+
+
+def migration_database_url(
+    explicit_url: str | None = None,
+    settings: Settings | None = None,
+) -> str:
+    """Return the database URL Alembic should use.
+
+    A non-blank URL passed by Alembic wins, which keeps the disposable test
+    database separate. Otherwise this uses the same settings load as the API.
+    The URL is not logged.
+    """
+    if isinstance(explicit_url, str) and explicit_url.strip():
+        return explicit_url.strip()
+    resolved = get_settings() if settings is None else settings
+    url = resolved.database_url
+    if url is None or url.strip() == "":
+        raise RuntimeError(
+            "DATABASE_URL is not configured. "
+            f"Set it in the process environment or in {_ENV_FILE}."
+        )
+    return url
