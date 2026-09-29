@@ -1,5 +1,6 @@
 """Dashboard API tests. Provider calls and PostgreSQL are not used."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -136,6 +137,7 @@ def test_overview_sql_aggregates_requests_in_the_database() -> None:
     assert "percentile_cont" in sql
     assert "sum(" in sql
     assert "substr(" in page_sql
+    assert "coalesce" in page_sql
     assert "limit" in page_sql
     assert "offset" in page_sql
 
@@ -259,6 +261,17 @@ def test_request_detail_keeps_attempts_and_unknown_cost() -> None:
     assert body["model"] == "gpt-5-nano"
     assert missing.status_code == 404
     assert "api_key" not in response.text
+
+
+def test_missing_final_route_uses_the_successful_attempt() -> None:
+    request_id = uuid4()
+    stored = replace(_stored(request_id), final_provider=None, final_model_id=None)
+    response = _client(_Store(detail=stored)).get(f"/api/v1/dashboard/requests/{request_id}")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["final_provider"] == "anthropic"
+    assert body["final_model"] == "claude-sonnet-4-6"
 
 
 class _Store:

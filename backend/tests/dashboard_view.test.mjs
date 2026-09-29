@@ -4,12 +4,15 @@ import test from "node:test";
 import {
   apiQuery,
   costSeries,
+  actionReason,
   detailModel,
   detailState,
   formatCost,
   formatRate,
   inclusiveEnd,
   panelState,
+  qualityLabel,
+  resolvedFinal,
 } from "../app/static/dashboard_view.mjs";
 
 test("panel and detail states", () => {
@@ -87,4 +90,32 @@ test("request detail keeps untrusted text and attempt order", () => {
     ["routing", "fallback"],
   );
   assert.match(detail.persistence, /Stored in request history/);
+});
+
+test("a successful attempt fills a missing final route", () => {
+  const request = {
+    final_provider: null,
+    final_model: null,
+    quality_verdict: null,
+    evaluations: [],
+    escalated: false,
+    escalation_reason: null,
+    escalation_error: null,
+    fallback_used: false,
+    fallback_reason: null,
+    attempts: [
+      { attempt_number: 1, status: "failed", provider: "openai", configured_model_id: "gpt-5-nano" },
+      { attempt_number: 2, status: "succeeded", provider: "anthropic", configured_model_id: "claude-sonnet-4-6" },
+    ],
+  };
+
+  assert.deepEqual(resolvedFinal(request), {
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+  });
+  assert.equal(qualityLabel(null, []), "Not evaluated");
+  assert.equal(qualityLabel("unknown", []), "unknown");
+  assert.equal(actionReason(false, null), "Not applicable");
+  assert.equal(actionReason(true, null), "unknown");
+  assert.equal(actionReason(false, "timeout"), "timeout");
 });

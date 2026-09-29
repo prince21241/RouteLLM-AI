@@ -1,13 +1,17 @@
 import {
   apiQuery,
   costSeries,
+  actionReason,
   detailModel,
   detailState,
   formatCost,
   formatRate,
   panelState,
+  qualityLabel,
   recordedOrUnknown,
+  resolvedFinal,
 } from "./dashboard_view.mjs";
+import { renderMarkdown } from "./markdown_dom.mjs";
 
 const API_BASE = window.ROUTELLM_API_BASE || "";
 const pageSize = 20;
@@ -306,7 +310,7 @@ function renderHistory(history) {
         cell(String(item.attempt_count), true),
         cell(item.total_cost === null ? `unknown (${item.cost_completeness})` : `${item.total_cost} USD (${item.cost_completeness})`, true),
         cell(item.end_to_end_latency_ms === null ? "unknown" : String(item.end_to_end_latency_ms), true),
-        cell(item.quality_verdict || "unknown"),
+        cell(qualityLabel(item.quality_verdict)),
         cell(item.escalated ? "yes" : "no"),
         cell(fallbackLabel(item.fallback_used)),
       );
@@ -340,6 +344,7 @@ async function loadDetail(requestId) {
 
 function renderDetail(request) {
   const model = detailModel(request);
+  const finals = resolvedFinal(request);
   const mode = detailState({ loading: false, error: "", request });
   if (mode !== "populated") {
     detailStatus.textContent = "Request detail is empty.";
@@ -352,14 +357,14 @@ function renderDetail(request) {
     ["Status", model.status],
     ["Initial provider", model.initialProvider],
     ["Initial model", model.initialModel],
-    ["Final provider", recordedOrUnknown(model.finalProvider)],
-    ["Final model", recordedOrUnknown(model.finalModel)],
+    ["Final provider", finals.provider || "Not recorded"],
+    ["Final model", finals.model || "Not recorded"],
     ["Escalated", model.escalated ? "yes" : "no"],
-    ["Escalation reason", recordedOrUnknown(model.escalationReason)],
-    ["Escalation error", recordedOrUnknown(model.escalationError)],
+    ["Escalation reason", actionReason(model.escalated, model.escalationReason)],
+    ["Escalation error", actionReason(model.escalated, model.escalationError)],
     ["Fallback", fallbackLabel(model.fallbackUsed)],
-    ["Fallback reason", recordedOrUnknown(model.fallbackReason)],
-    ["Quality", recordedOrUnknown(model.qualityVerdict)],
+    ["Fallback reason", actionReason(model.fallbackUsed, model.fallbackReason)],
+    ["Quality", qualityLabel(model.qualityVerdict, model.evaluations)],
     ["Cost", model.cost === null ? `unknown (${model.costCompleteness || "unknown"})` : `${model.cost} USD (${model.costCompleteness})`],
     ["Savings estimate", model.savings === null ? "unknown" : `${model.savings} USD`],
     ["Savings basis", model.savingsBasis || "same_token_volume"],
@@ -369,7 +374,15 @@ function renderDetail(request) {
   if (model.systemPrompt) {
     body.append(el("h3", "System prompt"), el("p", model.systemPrompt, "prompt"));
   }
-  body.append(el("h3", "Answer"), el("p", model.answer === null ? "Not recorded" : model.answer, "answer"));
+  body.append(el("h3", "Answer"));
+  if (model.answer === null) {
+    body.append(el("p", "Not recorded", "answer"));
+  } else {
+    const answer = document.createElement("div");
+    answer.className = "markdown answer";
+    renderMarkdown(answer, model.answer);
+    body.append(answer);
+  }
   if (model.qualityReasons.length) {
     body.append(el("h3", "Quality reasons"));
     body.append(list(model.qualityReasons));

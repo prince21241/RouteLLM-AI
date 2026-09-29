@@ -123,7 +123,7 @@ def _detail(row: StoredRequest) -> RequestDetailResponse:
         quality_reasons=list(row.quality_reasons or []),
         escalation_reason=row.escalation_reason,
         escalation_error=row.escalation_error,
-        final_model=row.final_model_id,
+        final_model=row.final_model_id or _answered_model(row.attempts),
         returned_attempt=row.returned_attempt_number,
         evaluations=[_evaluation(item) for item in (row.evaluations or [])],
         fallback_used=row.fallback_used,
@@ -132,8 +132,34 @@ def _detail(row: StoredRequest) -> RequestDetailResponse:
             {"model_id": model_id, "reason": reason}
             for model_id, reason in (row.fallback_skips or [])
         ],
-        final_provider=row.final_provider,
+        final_provider=row.final_provider or _answered_provider(row.attempts),
     )
+
+
+def _answered_attempt(attempts: list) -> object | None:
+    """Return the successful attempt that produced the stored answer.
+
+    Older rows left the request-level final model empty. The attempt still
+    names the provider and configured model.
+    """
+    succeeded = [item for item in attempts if item.status == "succeeded"]
+    if not succeeded:
+        return None
+    return max(succeeded, key=lambda item: item.attempt_number)
+
+
+def _answered_model(attempts: list) -> str | None:
+    answered = _answered_attempt(attempts)
+    if answered is None:
+        return None
+    return answered.configured_model_id
+
+
+def _answered_provider(attempts: list) -> str | None:
+    answered = _answered_attempt(attempts)
+    if answered is None:
+        return None
+    return answered.provider
 
 
 def _attempt(row: StoredAttempt) -> AttemptResponse:

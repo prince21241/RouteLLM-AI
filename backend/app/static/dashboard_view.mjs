@@ -147,3 +147,33 @@ export function recordedOrUnknown(value, suffix) {
   }
   return suffix ? `${value} ${suffix}` : String(value);
 }
+
+export function answeringAttempt(attempts) {
+  const succeeded = (attempts || []).filter((attempt) => attempt.status === "succeeded");
+  if (succeeded.length === 0) {
+    return null;
+  }
+  return [...succeeded].sort((left, right) => right.attempt_number - left.attempt_number)[0];
+}
+
+export function resolvedFinal(request) {
+  const answered = answeringAttempt(request?.attempts);
+  return {
+    provider: request?.final_provider || answered?.provider || null,
+    model: request?.final_model || answered?.configured_model_id || null,
+  };
+}
+
+export function qualityLabel(verdict, evaluations) {
+  if (verdict === null || verdict === undefined || verdict === "") {
+    return evaluations && evaluations.length ? "unknown" : "Not evaluated";
+  }
+  return String(verdict);
+}
+
+export function actionReason(used, reason) {
+  if (reason !== null && reason !== undefined && reason !== "") {
+    return String(reason);
+  }
+  return used === true ? "unknown" : "Not applicable";
+}

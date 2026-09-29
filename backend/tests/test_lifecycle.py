@@ -117,6 +117,10 @@ def test_priced_success_uses_the_verified_book_not_registry_zeros() -> None:
     assert body["end_to_end_latency_ms"] >= 0
     assert len(store.outcomes) == 1
     assert store.outcomes[0].provider_latency_ms == Decimal("42.500")
+    assert store.outcomes[0].final_model_id == "gpt-5-nano"
+    assert store.outcomes[0].final_provider == "openai"
+    assert body["final_provider"] == "openai"
+    assert body["returned_model"] == "gpt-5-nano"
     assert provider.calls == [(PROMPT, None)]
 
 

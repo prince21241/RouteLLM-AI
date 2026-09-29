@@ -171,6 +171,21 @@ def judge_breakdown_statement(filt: DashboardFilter):
     )
 
 
+def _latest_succeeded(column):
+    """The answering attempt when the request row left the final route empty."""
+    return (
+        select(column)
+        .where(
+            AttemptRow.request_id == RequestRow.id,
+            AttemptRow.status == "succeeded",
+        )
+        .order_by(AttemptRow.attempt_number.desc())
+        .limit(1)
+        .correlate(RequestRow)
+        .scalar_subquery()
+    )
+
+
 def request_page_statement(filt: DashboardFilter):
     """Return one history page. The selected prompt text is capped at 80 characters."""
     attempt_count = (
@@ -187,8 +202,13 @@ def request_page_statement(filt: DashboardFilter):
             RequestRow.status,
             RequestRow.provider,
             RequestRow.model_id,
-            RequestRow.final_provider,
-            RequestRow.final_model_id,
+            func.coalesce(RequestRow.final_provider, _latest_succeeded(AttemptRow.provider)).label(
+                "final_provider"
+            ),
+            func.coalesce(
+                RequestRow.final_model_id,
+                _latest_succeeded(AttemptRow.configured_model_id),
+            ).label("final_model_id"),
             func.substr(RequestRow.prompt, 1, _PREVIEW).label("prompt_preview"),
             (func.char_length(RequestRow.prompt) > _PREVIEW).label("prompt_truncated"),
             RequestRow.total_cost,

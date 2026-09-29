@@ -314,6 +314,7 @@ class ChatService:
                 escalation_error=escalation_error,
                 returned_model=returned_model_id,
                 returned_attempt=returned_attempt,
+                final_provider=returned.provider.value,
             )
         finally:
             if provider_client is not None:
@@ -868,18 +869,22 @@ class ChatService:
             return "not_configured", None
         try:
             await self._store.record_success(
-                _outcome(
-                    request_id=request_id,
-                    status="succeeded",
-                    provider=generated.provider.value,
-                    configured_model_id=priced.configured_model_id,
-                    reported_model_id=generated.model,
-                    usage=usage_from_response(generated),
-                    provider_latency_ms=generated.latency_ms,
-                    priced=priced,
-                    error_message=None,
-                    response_text=generated.content,
-                    started=started,
+                replace(
+                    _outcome(
+                        request_id=request_id,
+                        status="succeeded",
+                        provider=generated.provider.value,
+                        configured_model_id=priced.configured_model_id,
+                        reported_model_id=generated.model,
+                        usage=usage_from_response(generated),
+                        provider_latency_ms=generated.latency_ms,
+                        priced=priced,
+                        error_message=None,
+                        response_text=generated.content,
+                        started=started,
+                    ),
+                    final_model_id=priced.configured_model_id,
+                    final_provider=generated.provider.value,
                 )
             )
         except Exception as exc:
@@ -1059,6 +1064,7 @@ def _with_check(
         escalation_reason=escalation_reason,
         escalation_error=escalation_error,
         final_model_id=final_model_id,
+        final_provider=outcome.provider,
         returned_attempt_number=returned_attempt,
         evaluations=evaluations,
     )
