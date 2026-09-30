@@ -6,7 +6,7 @@ placeholder, so logs of the settings object do not include the key.
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, SecretStr, field_serializer, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     ollama_routing_enabled: bool = False
     ollama_quality_tier: QualityTier = QualityTier.LOW
     routing_preference: str = ""
+    routing_strategy: Literal["rule_based", "ml"] = "rule_based"
+    ml_artifact_path: str = ""
+    ml_trusted_root: str = ""
     max_input_characters: int = Field(default=8000, ge=1)
     low_complexity_threshold: float = Field(default=0.30, ge=0, le=1)
     high_complexity_threshold: float = Field(default=0.70, ge=0, le=1)
@@ -134,6 +137,13 @@ class Settings(BaseSettings):
     )
     @classmethod
     def strip_model_setting(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("ml_artifact_path", "ml_trusted_root", mode="before")
+    @classmethod
+    def strip_ml_path(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip()
         return value

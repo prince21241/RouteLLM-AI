@@ -66,6 +66,7 @@ class RequestStore:
                         premium_baseline_model=None,
                         premium_baseline_cost=None,
                         estimated_savings=None,
+                        routing_metadata=pending.routing_metadata,
                     )
                 )
 
@@ -288,6 +289,7 @@ def _detail(row: RequestRow) -> StoredRequest:
         fallback_reason=row.fallback_reason,
         fallback_skips=_skips(row.fallback_skips),
         final_provider=row.final_provider,
+        routing_metadata=None if row.routing_metadata is None else dict(row.routing_metadata),
     )
 
 

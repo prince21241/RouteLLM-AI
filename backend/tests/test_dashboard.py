@@ -274,6 +274,25 @@ def test_missing_final_route_uses_the_successful_attempt() -> None:
     assert body["final_model"] == "claude-sonnet-4-6"
 
 
+def test_request_detail_includes_routing_metadata() -> None:
+    request_id = uuid4()
+    metadata = {
+        "requested_strategy": "rule_based",
+        "effective_strategy": "rule_based",
+        "artifact_version": None,
+        "predicted_model": None,
+        "confidence": None,
+        "rules_used": True,
+        "rules_reason": "routing strategy is rule_based",
+        "initial_model_id": "gpt-5-nano",
+    }
+    stored = replace(_stored(request_id), routing_metadata=metadata)
+    response = _client(_Store(detail=stored)).get(f"/api/v1/dashboard/requests/{request_id}")
+
+    assert response.status_code == 200
+    assert response.json()["routing_metadata"] == metadata
+
+
 class _Store:
     """Returns canned aggregates and does not open a database."""
 

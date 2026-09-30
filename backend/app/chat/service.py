@@ -28,6 +28,7 @@ from app.api.chat_schemas import (
     ChatResponse,
     FallbackSkip,
     RoutingDetails,
+    RoutingMetadata,
     ServerFeature,
 )
 from app.api.schemas import LLMResponse, ModelConfig, Provider, ReportedUsage
@@ -58,6 +59,7 @@ from app.providers.errors import (
     ProviderTimeoutError,
 )
 from app.providers.failure import ProviderFailure, classify_provider_error
+from app.ml.runtime import RouteSelector
 from app.routing.catalog import VerifiedModelMetadata
 from app.routing.complexity import ComplexityClassifier
 from app.routing.model_registry import ModelRegistry
@@ -94,6 +96,7 @@ class ChatService:
         provider_factory: ProviderFactory,
         store: RequestStore | None = None,
         evaluator: object | None = None,
+        selector: RouteSelector | None = None,
     ) -> None:
         self._settings = settings
         self._registry = registry
@@ -102,6 +105,7 @@ class ChatService:
         self._provider_factory = provider_factory
         self._store = store
         self._evaluator = evaluator
+        self._selector = selector if selector is not None else RouteSelector(router, settings)
 
     def describe_options(self) -> ChatOptionsResponse:
         """Return catalog and server-feature status. No credentials are included."""
@@ -121,6 +125,9 @@ class ChatService:
             quality_evaluation=ServerFeature(enabled=self._settings.quality_evaluation_enabled),
             escalation=ServerFeature(enabled=self._settings.escalation_enabled),
             fallback=ServerFeature(enabled=self._settings.fallback_enabled),
+            routing_strategy=self._selector.requested_strategy,
+            effective_routing_strategy=self._selector.effective_strategy,
+            ml_diagnostic=self._selector.diagnostic,
         )
 
     async def complete(
@@ -143,7 +150,11 @@ class ChatService:
             low=self._settings.low_complexity_threshold,
             high=self._settings.high_complexity_threshold,
         )
-        decision = self._router.select(assessment.tier, _registry_for(self._registry, provider))
+        decision = await self._selector.select(
+            user_prompt,
+            assessment.tier,
+            _registry_for(self._registry, provider),
+        )
         request_id = uuid4()
         created_at = datetime.now(timezone.utc)
         if self._store is not None:
@@ -162,6 +173,7 @@ class ChatService:
                         selected_model_tier=decision.model.quality_tier.value,
                         selection_reason=decision.selection_reason,
                         degraded=decision.degraded,
+                        routing_metadata=_trace_dict(decision),
                     )
                 )
             except Exception as exc:
@@ -315,6 +327,7 @@ class ChatService:
                 returned_model=returned_model_id,
                 returned_attempt=returned_attempt,
                 final_provider=returned.provider.value,
+                routing_metadata=_trace_dict(decision),
             )
         finally:
             if provider_client is not None:
@@ -525,6 +538,7 @@ class ChatService:
                 fallback_reason=fallback_reason,
                 fallback_skips=skips,
                 final_provider=returned.model.provider.value,
+                routing_metadata=_trace_dict(decision),
             )
         finally:
             for client in clients:
@@ -1186,6 +1200,13 @@ def _outcome(
     )
 
 
+def _trace_dict(decision: object) -> dict[str, object] | None:
+    trace = getattr(decision, "trace", None)
+    if trace is None:
+        return None
+    return trace.to_dict()
+
+
 def _chat_response(
     *,
     request_id: str,
@@ -1213,6 +1234,7 @@ def _chat_response(
     fallback_reason: str | None = None,
     fallback_skips: list[SkippedCandidate] | None = None,
     final_provider: str | None = None,
+    routing_metadata: dict[str, object] | None = None,
 ) -> ChatResponse:
     return ChatResponse(
         request_id=request_id,
@@ -1227,6 +1249,9 @@ def _chat_response(
             selection_reason=selection_reason,
             degraded=degraded,
             escalated=escalated,
+            routing_metadata=None
+            if routing_metadata is None
+            else RoutingMetadata.model_validate(routing_metadata),
         ),
         metrics=ChatMetrics(
             input_tokens=generated.input_tokens,

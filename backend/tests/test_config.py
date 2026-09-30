@@ -30,6 +30,9 @@ def test_defaults(settings: Settings) -> None:
     assert settings.ollama_routing_enabled is False
     assert settings.ollama_quality_tier == QualityTier.LOW
     assert settings.routing_preference == ""
+    assert settings.routing_strategy == "rule_based"
+    assert settings.ml_artifact_path == ""
+    assert settings.ml_trusted_root == ""
     assert settings.max_input_characters == 8000
     assert settings.low_complexity_threshold == 0.30
     assert settings.high_complexity_threshold == 0.70

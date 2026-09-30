@@ -10,6 +10,7 @@ import {
   qualityLabel,
   recordedOrUnknown,
   resolvedFinal,
+  routingLines,
 } from "./dashboard_view.mjs";
 import { renderMarkdown } from "./markdown_dom.mjs";
 
@@ -369,6 +370,7 @@ function renderDetail(request) {
     ["Savings estimate", model.savings === null ? "unknown" : `${model.savings} USD`],
     ["Savings basis", model.savingsBasis || "same_token_volume"],
     ["End-to-end latency", model.latencyMs === null ? "unknown" : `${model.latencyMs} ms`],
+    ...routingLines(model.routingMetadata),
   ]));
   body.append(el("h3", "Prompt"), el("p", model.prompt, "prompt"));
   if (model.systemPrompt) {

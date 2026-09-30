@@ -13,6 +13,7 @@ import {
   panelState,
   qualityLabel,
   resolvedFinal,
+  routingLines,
 } from "../app/static/dashboard_view.mjs";
 
 test("panel and detail states", () => {
@@ -118,4 +119,21 @@ test("a successful attempt fills a missing final route", () => {
   assert.equal(actionReason(false, null), "Not applicable");
   assert.equal(actionReason(true, null), "unknown");
   assert.equal(actionReason(false, "timeout"), "timeout");
+});
+
+test("routing metadata is shown and a missing trace is omitted", () => {
+  assert.deepEqual(routingLines(null), []);
+  const lines = routingLines({
+    requested_strategy: "ml",
+    effective_strategy: "rule_based",
+    artifact_version: "abc",
+    predicted_model: "gpt-5-nano",
+    confidence: 0.42,
+    rules_used: true,
+    rules_reason: "confidence below validation threshold",
+  });
+  assert.equal(lines[0][1], "ml");
+  assert.equal(lines[1][1], "rule_based");
+  assert.equal(lines[4][1], "0.42");
+  assert.equal(lines[5][1], "yes");
 });

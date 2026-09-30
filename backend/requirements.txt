@@ -8,3 +8,4 @@ sqlalchemy>=2.0.36
 greenlet>=3.1.0
 asyncpg>=0.30.0
 alembic>=1.14.0
+scikit-learn>=1.5,<1.8

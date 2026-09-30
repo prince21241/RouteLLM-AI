@@ -102,6 +102,7 @@ class RequestDetailResponse(BaseModel):
     fallback_reason: str | None = None
     fallback_skips: list[dict[str, str]] = Field(default_factory=list)
     final_provider: str | None = None
+    routing_metadata: dict[str, object] | None = None
 
 
 class EvaluationResponse(BaseModel):

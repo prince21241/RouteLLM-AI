@@ -19,6 +19,8 @@ from app.pricing.service import (
     lookup_prices,
     usage_from_response,
 )
+from app.providers.errors import ProviderError
+from app.providers.failure import classify_provider_error
 
 _VERDICTS = frozenset({"pass", "fail", "unknown"})
 
@@ -98,6 +100,22 @@ async def run_judge(
     """Call ``generate`` once and parse its completion."""
     try:
         generated = await generate(judge_prompt(prompt, answer, rubric), _JUDGE_INSTRUCTIONS)
+    except ProviderError as exc:
+        failure = classify_provider_error(exc)
+        priced = None
+        if failure.usage is not None:
+            priced = estimate_cost(failure.usage, lookup_prices(model_id))
+        return EvaluationResult(
+            verdict="error",
+            score=None,
+            reasons=("The model judge failed.",),
+            method="model_judge",
+            judge_model=model_id,
+            judge_usage=failure.usage,
+            judge_cost=priced,
+            error_message=type(exc).__name__,
+            error_category=failure.category.value,
+        )
     except Exception as exc:
         return EvaluationResult(
             verdict="error",
@@ -105,7 +123,7 @@ async def run_judge(
             reasons=("The model judge failed.",),
             method="model_judge",
             judge_model=model_id,
-            error_message=f"{type(exc).__name__}",
+            error_message=type(exc).__name__,
         )
     parsed = parse_judge_output(generated.content, model_id=model_id)
     priced = estimate_cost(usage_from_response(generated), lookup_prices(model_id))

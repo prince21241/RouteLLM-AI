@@ -96,4 +96,5 @@ def apply_score_threshold(result: EvaluationResult, minimum_score: float) -> Eva
         judge_latency_ms=result.judge_latency_ms,
         judge_cost=result.judge_cost,
         error_message=result.error_message,
+        error_category=result.error_category,
     )

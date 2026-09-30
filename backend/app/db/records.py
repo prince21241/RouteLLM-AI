@@ -22,6 +22,7 @@ class PendingRequest:
     selected_model_tier: str
     selection_reason: str
     degraded: bool
+    routing_metadata: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -193,3 +194,4 @@ class StoredRequest:
     fallback_reason: str | None = None
     fallback_skips: list[tuple[str, str]] | None = None
     final_provider: str | None = None
+    routing_metadata: dict[str, object] | None = None

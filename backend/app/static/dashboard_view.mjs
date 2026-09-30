@@ -138,6 +138,7 @@ export function detailModel(request) {
     latencyMs: request.end_to_end_latency_ms ?? null,
     attempts: orderedAttempts(request.attempts),
     evaluations: [...(request.evaluations || [])],
+    routingMetadata: request.routing_metadata ?? null,
   };
 }
 
@@ -176,4 +177,19 @@ export function actionReason(used, reason) {
     return String(reason);
   }
   return used === true ? "unknown" : "Not applicable";
+}
+
+export function routingLines(metadata) {
+  if (!metadata) {
+    return [];
+  }
+  return [
+    ["Requested routing", metadata.requested_strategy || "unknown"],
+    ["Effective routing", metadata.effective_strategy || "unknown"],
+    ["ML artifact", metadata.artifact_version || "Not applicable"],
+    ["ML prediction", metadata.predicted_model || "Not applicable"],
+    ["ML confidence", metadata.confidence == null ? "Not applicable" : String(metadata.confidence)],
+    ["Rules used", metadata.rules_used ? "yes" : "no"],
+    ["Rules reason", metadata.rules_reason || "Not applicable"],
+  ];
 }

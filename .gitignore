@@ -21,3 +21,7 @@ build/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Local ML artifacts. Operators create these; they are not source.
+backend/var/
+*.joblib

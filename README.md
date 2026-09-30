@@ -117,7 +117,64 @@ Selection does not claim to be the cheapest or the highest quality. It does not 
 
 A model is eligible only when its routing flag is on and its required configuration is present. For the documented local setup, `OPENAI_ROUTING_ENABLED` defaults to true, but `gpt-5-nano` stays out of routing until `OPENAI_API_KEY` is set. Anthropic and Ollama stay disabled until their routing flags are turned on. Context windows and list prices in the catalog are verified metadata for `gpt-5-nano`, `claude-sonnet-4-6`, and `llama3.2`. Changing a model id to something else fails startup instead of inventing metadata. Chat responses leave `quality_score` null and `escalated` false. `metrics.cost` is filled from the price book when the selected model id is in that book, and stays null when it is not.
 
-`MAX_INPUT_CHARACTERS` (default 8000) limits the combined user prompt and system prompt. It is an application character limit, not a model context-window check. `MIN_QUALITY_SCORE` and `MAX_MODEL_ATTEMPTS` are unused until later phases.
+`MAX_INPUT_CHARACTERS` (default 8000) limits the combined user prompt and system prompt. It is an application character limit, not a model context-window check. `MIN_QUALITY_SCORE` is the default quality threshold for optional checks and for ML labels. `MAX_MODEL_ATTEMPTS` bounds generation attempts.
+
+## Optional ML router
+
+Rule-based routing stays the default (`ROUTING_STRATEGY=rule_based`). The ML path is an optional scikit-learn pipeline: TF-IDF features of the user prompt and logistic regression. Predicted probabilities are confidence estimates for the chosen class. They are not proof of answer quality.
+
+The 30-case evaluation file is a smoke dataset. It is not training data, and this repository does not contain a measured multi-model training set. No production artifact is shipped. Do not enable ML routing until `compare` on held-out measured data supports a configured quality tolerance and cost objective. A small result is exploratory even when the commands succeed.
+
+Training rows come from comparable live evaluations of the same prompt. The label is the cheapest model that passed the quality threshold with complete or estimated cost. If every candidate has a definitive fail, the label is `__no_acceptable_model__`. Missing evaluations, unknown grades, provider failures, and incomplete costs are excluded and counted. They are not treated as quality failures or as wins for another model. Mock answers are rejected. Reference answers and judge metadata are not features.
+
+Splits are by `group_id`, so duplicates and near-duplicates stay together. Train and validation choose the confidence threshold. The test split is only for the comparison. Each class needs at least three groups. Fewer than 40 labeled prompts is marked exploratory.
+
+From `backend`, with the project virtual environment. Collection does not call a provider until `--execute`. Keep `ROUTING_STRATEGY=rule_based`.
+
+The smoke file stays `app/evaluation/datasets/v1.json` (`2026-09-29.1`). It is not training evidence. The collection dataset is `app/evaluation/datasets/families-v1.json`: 48 families, eight in each of the six categories, two paraphrases in each family, and one shared `group_id` per family. Answers are exact, numeric, or JSON checks, except the ice-density pair, which has an explicit rubric. Character-based ceilings from `--estimate` are approximate allowances, not invoices.
+
+```powershell
+..\.venv\Scripts\python.exe -m app.ml collect --estimate --dataset app\evaluation\datasets\families-v1.json
+..\.venv\Scripts\python.exe -m app.ml collect --estimate --judge --dataset app\evaluation\datasets\families-v1.json
+$out = Join-Path $env:LOCALAPPDATA "RouteLLM-AI\collections\families-2026-09-29.json"
+..\.venv\Scripts\python.exe -m app.ml collect --execute --dataset app\evaluation\datasets\families-v1.json --output $out --max-spend 1.56196225 --judge
+..\.venv\Scripts\python.exe -m app.ml validate --dataset $out
+```
+
+`--max-spend` is USD for generation plus judge calls. With `--judge`, the approximate recommended cap printed for this file is `1.56196225` (generation `1.55852545`, judge `0.0034368`). The collector saves the training file and a sibling `.audit.json` after every recorded outcome. The audit stores judge token usage and judge cost separately; that cost is not added to a candidate's training cost. Resume refuses a different dataset, candidate list, or judge configuration. A call that would exceed the cap is not started. An incurred generation or judge cost that cannot be priced stops the run and is not treated as zero. Rubric rows stay unknown without `--judge`. `gpt-5-nano` and `claude-sonnet-4-6` are the default candidates. Models without a published token price are not called. Write the output under `%LOCALAPPDATA%\RouteLLM-AI\collections`, outside the repository.
+
+```powershell
+..\.venv\Scripts\python.exe -m app.ml validate --dataset path\to\training.json
+..\.venv\Scripts\python.exe -m app.ml label --dataset path\to\training.json --output path\to\labels.json
+..\.venv\Scripts\python.exe -m app.ml train --dataset path\to\training.json --output-dir ..\backend\var\ml --seed 17
+..\.venv\Scripts\python.exe -m app.ml compare --dataset path\to\training.json --artifact ..\backend\var\ml\model.joblib --trusted-root ..\backend\var\ml
+```
+
+Add `--quality-tolerance 0.05 --cost-objective min_mean_cost` only when you want a promotion decision. Without both, the comparison reports metrics and does not name a winner. Recorded cost and latency are single-model outcomes. They omit escalation, fallback, judge calls, and end-to-end wall-clock time.
+
+Apply the nullable metadata migration before serving traffic that writes the new column:
+
+```powershell
+..\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+To try ML routing, set these in `.env` and restart the API. The artifact path must stay inside the trusted directory. The API does not accept an uploaded model or a path from a request.
+
+```text
+ROUTING_STRATEGY=ml
+ML_ARTIFACT_PATH=C:\Credit-Card-Fraud-Detector\RouteLLM-AI\backend\var\ml\model.joblib
+ML_TRUSTED_ROOT=C:\Credit-Card-Fraud-Detector\RouteLLM-AI\backend\var\ml
+```
+
+An absent, invalid, or incompatible artifact leaves rule-based routing in effect and records the diagnostic. Return to the default with `ROUTING_STRATEGY=rule_based` and restart. Low confidence, an ineligible model, or a no-acceptable-model prediction also uses the existing rules. That fallback does not guarantee answer quality. Explicit provider limits, credentials, escalation, fallback, and attempt budgets still apply. Request details include `routing_metadata`.
+
+Collect more real data in stages:
+
+1. Run the evaluation dataset with `--execute` separately for each candidate model, only when you authorize the spend. Keep the JSON outside the repository.
+2. Convert those runs into the training format: one prompt record, a shared `group_id` for paraphrases, live provenance, and measured evidence. Do not convert `--mock` output.
+3. Add families where the cheap model fails and the stronger model passes, and families where no model passes.
+4. Hold out entire families before fitting. Check coverage and class balance on the comparison, not a fixed sample count.
+5. Enable `ROUTING_STRATEGY=ml` only after that held-out comparison supports the tolerance you configured.
 
 ## Pricing
 
@@ -439,6 +496,8 @@ backend/
     pricing/           Decimal cost, baseline, and savings
     providers/         LLMProvider and OpenAI, Anthropic, Ollama clients
     routing/           catalog, complexity heuristic, and model router
+    ml/                optional TF-IDF logistic regression router
+    evaluation/        versioned smoke dataset and offline grading
   alembic/             PostgreSQL migrations
   scripts/
     verify_openai.py   one manual OpenAI request

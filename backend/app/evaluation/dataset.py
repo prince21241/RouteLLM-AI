@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 DATASET_PATH = Path(__file__).resolve().parent / "datasets" / "v1.json"
+FAMILIES_PATH = Path(__file__).resolve().parent / "datasets" / "families-v1.json"
 CATEGORIES = frozenset({"factual", "reasoning", "math", "coding", "structured", "instruction"})
 SPLITS = frozenset({"calibration", "held_out"})
 METHODS = frozenset({"exact", "numeric", "json_fields", "rubric"})
@@ -35,6 +36,7 @@ class EvalCase(BaseModel):
     criteria: str | None = None
     smoke: bool = False
     system_prompt: str | None = None
+    group_id: str | None = Field(default=None, min_length=1)
 
 
 class EvaluationDataset(BaseModel):

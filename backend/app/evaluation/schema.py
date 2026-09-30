@@ -32,6 +32,7 @@ class EvaluationResult:
     judge_latency_ms: float | None = None
     judge_cost: CostEstimate | None = None
     error_message: str | None = None
+    error_category: str | None = None
 
     def score_decimal(self) -> Decimal | None:
         if self.score is None:

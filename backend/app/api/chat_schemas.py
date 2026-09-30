@@ -48,6 +48,9 @@ class ChatOptionsResponse(BaseModel):
     quality_evaluation: ServerFeature
     escalation: ServerFeature
     fallback: ServerFeature
+    routing_strategy: Literal["rule_based", "ml"] = "rule_based"
+    effective_routing_strategy: Literal["rule_based", "ml"] = "rule_based"
+    ml_diagnostic: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -73,6 +76,21 @@ class FallbackSkip(BaseModel):
     reason: str
 
 
+class RoutingMetadata(BaseModel):
+    """How the initial model was chosen. Confidence is not answer quality."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    requested_strategy: Literal["rule_based", "ml"]
+    effective_strategy: Literal["rule_based", "ml"]
+    artifact_version: str | None = None
+    predicted_model: str | None = None
+    confidence: float | None = None
+    rules_used: bool
+    rules_reason: str | None = None
+    initial_model_id: str = Field(min_length=1)
+
+
 class RoutingDetails(BaseModel):
     """Pre-request routing. Complexity and the selected model stay separate."""
 
@@ -87,6 +105,7 @@ class RoutingDetails(BaseModel):
     selection_reason: str = Field(min_length=1)
     degraded: bool
     escalated: bool = False
+    routing_metadata: RoutingMetadata | None = None
 
 
 class ChatMetrics(BaseModel):

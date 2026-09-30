@@ -66,6 +66,7 @@ class RequestRow(Base):
     fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     fallback_skips: Mapped[list[dict[str, str]] | None] = mapped_column(JSONB, nullable=True)
     final_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    routing_metadata: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     attempts: Mapped[list["AttemptRow"]] = relationship(
         back_populates="request",
         order_by="AttemptRow.attempt_number",

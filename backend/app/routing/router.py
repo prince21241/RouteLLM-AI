@@ -33,11 +33,13 @@ class RoutingDecision:
         model: ModelConfig,
         selection_reason: str,
         degraded: bool,
+        trace: object | None = None,
     ) -> None:
         self.requested_tier = requested_tier
         self.model = model
         self.selection_reason = selection_reason
         self.degraded = degraded
+        self.trace = trace
 
 
 class ModelRouter:

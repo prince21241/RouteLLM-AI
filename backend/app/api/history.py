@@ -133,6 +133,7 @@ def _detail(row: StoredRequest) -> RequestDetailResponse:
             for model_id, reason in (row.fallback_skips or [])
         ],
         final_provider=row.final_provider or _answered_provider(row.attempts),
+        routing_metadata=row.routing_metadata,
     )
 
 

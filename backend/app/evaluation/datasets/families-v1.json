@@ -1,0 +1,920 @@
+{
+  "version": "2026-09-29.families",
+  "cases": [
+    {
+      "id": "fact-canberra-1",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-canberra",
+      "prompt": "What is the capital of Australia? Reply with only the city name.",
+      "smoke": true,
+      "expected": "Canberra"
+    },
+    {
+      "id": "fact-canberra-2",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-canberra",
+      "prompt": "Name the capital city of Australia. Reply with only that city.",
+      "expected": "Canberra"
+    },
+    {
+      "id": "fact-austen-1",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-austen",
+      "prompt": "Who wrote Pride and Prejudice? Reply with only the author's name.",
+      "expected": "Jane Austen"
+    },
+    {
+      "id": "fact-austen-2",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-austen",
+      "prompt": "Name the author of Pride and Prejudice. Reply with only the name.",
+      "expected": "Jane Austen"
+    },
+    {
+      "id": "fact-carbon-1",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-carbon",
+      "prompt": "What is the name of the element with atomic number 6? Reply with only the name.",
+      "expected": "Carbon"
+    },
+    {
+      "id": "fact-carbon-2",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-carbon",
+      "prompt": "Which element has atomic number 6? Reply with only its name.",
+      "expected": "Carbon"
+    },
+    {
+      "id": "fact-salt-1",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-salt",
+      "prompt": "What is the chemical formula for table salt? Reply with only the formula.",
+      "expected": "NaCl"
+    },
+    {
+      "id": "fact-salt-2",
+      "split": "calibration",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-salt",
+      "prompt": "Give the chemical formula for sodium chloride. Reply with only the formula.",
+      "expected": "NaCl"
+    },
+    {
+      "id": "fact-ottawa-1",
+      "split": "held_out",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-ottawa",
+      "prompt": "What is the capital of Canada? Reply with only the city name.",
+      "expected": "Ottawa"
+    },
+    {
+      "id": "fact-ottawa-2",
+      "split": "held_out",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-ottawa",
+      "prompt": "Name the capital city of Canada. Reply with only that city.",
+      "expected": "Ottawa"
+    },
+    {
+      "id": "fact-oxygen-1",
+      "split": "held_out",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-oxygen",
+      "prompt": "What is the chemical symbol for oxygen? Reply with only the symbol.",
+      "expected": "O"
+    },
+    {
+      "id": "fact-oxygen-2",
+      "split": "held_out",
+      "category": "factual",
+      "method": "exact",
+      "group_id": "fact-oxygen",
+      "prompt": "Which chemical symbol stands for oxygen? Reply with only the symbol.",
+      "expected": "O"
+    },
+    {
+      "id": "fact-light-1",
+      "split": "held_out",
+      "category": "factual",
+      "method": "numeric",
+      "group_id": "fact-light",
+      "prompt": "What is the exact speed of light in vacuum, in meters per second? Reply with only the integer.",
+      "expected": "299792458"
+    },
+    {
+      "id": "fact-light-2",
+      "split": "held_out",
+      "category": "factual",
+      "method": "numeric",
+      "group_id": "fact-light",
+      "prompt": "State the defined speed of light in vacuum in meters per second. Reply with only the integer.",
+      "expected": "299792458"
+    },
+    {
+      "id": "fact-hexagon-1",
+      "split": "held_out",
+      "category": "factual",
+      "method": "numeric",
+      "group_id": "fact-hexagon",
+      "prompt": "How many sides does a hexagon have? Reply with only the integer.",
+      "expected": "6"
+    },
+    {
+      "id": "fact-hexagon-2",
+      "split": "held_out",
+      "category": "factual",
+      "method": "numeric",
+      "group_id": "fact-hexagon",
+      "prompt": "A hexagon has how many sides? Reply with only the integer.",
+      "expected": "6"
+    },
+    {
+      "id": "math-13-14-1",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-13-14",
+      "prompt": "What is 13 multiplied by 14? Reply with only the integer.",
+      "smoke": true,
+      "expected": "182"
+    },
+    {
+      "id": "math-13-14-2",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-13-14",
+      "prompt": "Calculate 13 times 14. Reply with only the integer.",
+      "expected": "182"
+    },
+    {
+      "id": "math-power-8-1",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-power-8",
+      "prompt": "What is 2 to the power of 8? Reply with only the integer.",
+      "expected": "256"
+    },
+    {
+      "id": "math-power-8-2",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-power-8",
+      "prompt": "Calculate 2 raised to the 8th power. Reply with only the integer.",
+      "expected": "256"
+    },
+    {
+      "id": "math-percent-45-1",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-percent-45",
+      "prompt": "What is 20 percent of 45? Reply with only the number.",
+      "expected": "9"
+    },
+    {
+      "id": "math-percent-45-2",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-percent-45",
+      "prompt": "Calculate twenty percent of 45. Reply with only the number.",
+      "expected": "9"
+    },
+    {
+      "id": "math-area-1",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-area",
+      "prompt": "A rectangle is 8 units by 5 units. What is its area? Reply with only the integer.",
+      "expected": "40"
+    },
+    {
+      "id": "math-area-2",
+      "split": "calibration",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-area",
+      "prompt": "What is the area of a rectangle with width 8 and height 5? Reply with only the integer.",
+      "expected": "40"
+    },
+    {
+      "id": "math-sqrt-81-1",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-sqrt-81",
+      "prompt": "What is the square root of 81? Reply with only the integer.",
+      "expected": "9"
+    },
+    {
+      "id": "math-sqrt-81-2",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-sqrt-81",
+      "prompt": "Calculate the principal square root of 81. Reply with only the integer.",
+      "expected": "9"
+    },
+    {
+      "id": "math-divide-144-1",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-divide-144",
+      "prompt": "What is 144 divided by 12? Reply with only the integer.",
+      "expected": "12"
+    },
+    {
+      "id": "math-divide-144-2",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-divide-144",
+      "prompt": "Calculate 144 / 12. Reply with only the integer.",
+      "expected": "12"
+    },
+    {
+      "id": "math-sum-789-1",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-sum-789",
+      "prompt": "What is 7 plus 8 plus 9? Reply with only the integer.",
+      "expected": "24"
+    },
+    {
+      "id": "math-sum-789-2",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-sum-789",
+      "prompt": "Add 7, 8, and 9. Reply with only the integer.",
+      "expected": "24"
+    },
+    {
+      "id": "math-power-34-1",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-power-34",
+      "prompt": "What is 3 to the power of 4? Reply with only the integer.",
+      "expected": "81"
+    },
+    {
+      "id": "math-power-34-2",
+      "split": "held_out",
+      "category": "math",
+      "method": "numeric",
+      "group_id": "math-power-34",
+      "prompt": "Calculate 3 raised to the 4th power. Reply with only the integer.",
+      "expected": "81"
+    },
+    {
+      "id": "reason-mibs-1",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "exact",
+      "group_id": "reason-mibs",
+      "prompt": "All mibs are zibs. All zibs are wibs. Are all mibs wibs? Reply with only yes or no.",
+      "expected": "yes"
+    },
+    {
+      "id": "reason-mibs-2",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "exact",
+      "group_id": "reason-mibs",
+      "prompt": "If every mib is a zib and every zib is a wib, is every mib a wib? Reply with only yes or no.",
+      "expected": "yes"
+    },
+    {
+      "id": "reason-glips-1",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "exact",
+      "group_id": "reason-glips",
+      "prompt": "All glips are plocks. Some plocks are narns. Are all glips narns? Reply with only yes or no.",
+      "expected": "no"
+    },
+    {
+      "id": "reason-glips-2",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "exact",
+      "group_id": "reason-glips",
+      "prompt": "Every glip is a plock, and some plocks are narns. Is every glip a narn? Reply with only yes or no.",
+      "expected": "no"
+    },
+    {
+      "id": "reason-pen-1",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-pen",
+      "prompt": "A pen and a notebook cost $1.50 together. The notebook costs $1.00 more than the pen. How much does the pen cost in dollars? Reply with only the number.",
+      "expected": "0.25"
+    },
+    {
+      "id": "reason-pen-2",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-pen",
+      "prompt": "Together a pen and a notebook cost 1.50 dollars. The notebook costs one dollar more than the pen. What is the pen's price in dollars? Reply with only the number.",
+      "expected": "0.25"
+    },
+    {
+      "id": "reason-hands-1",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-hands",
+      "prompt": "Three people are in a room. Each person shakes hands with each other person once. How many handshakes occur? Reply with only the integer.",
+      "expected": "3"
+    },
+    {
+      "id": "reason-hands-2",
+      "split": "calibration",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-hands",
+      "prompt": "How many handshakes happen if three people each shake hands with every other person exactly once? Reply with only the integer.",
+      "expected": "3"
+    },
+    {
+      "id": "reason-older-1",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "exact",
+      "group_id": "reason-older",
+      "prompt": "Alex is older than Sam. Sam is older than Jo. Is Alex older than Jo? Reply with only yes or no.",
+      "expected": "yes"
+    },
+    {
+      "id": "reason-older-2",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "exact",
+      "group_id": "reason-older",
+      "prompt": "Alex is older than Sam, and Sam is older than Jo. Is Alex older than Jo? Reply with only yes or no.",
+      "expected": "yes"
+    },
+    {
+      "id": "reason-weeks-1",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-weeks",
+      "prompt": "How many days are in 2 weeks? Reply with only the integer.",
+      "expected": "14"
+    },
+    {
+      "id": "reason-weeks-2",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-weeks",
+      "prompt": "Two weeks contain how many days? Reply with only the integer.",
+      "expected": "14"
+    },
+    {
+      "id": "reason-sheep-1",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-sheep",
+      "prompt": "A farmer has 17 sheep. All but 9 run away. How many sheep are left? Reply with only the integer.",
+      "expected": "9"
+    },
+    {
+      "id": "reason-sheep-2",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "numeric",
+      "group_id": "reason-sheep",
+      "prompt": "There are 17 sheep, and all but 9 run away. How many remain? Reply with only the integer.",
+      "expected": "9"
+    },
+    {
+      "id": "reason-ice-1",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "rubric",
+      "group_id": "reason-ice",
+      "prompt": "Why does ice float on liquid water? Answer in two sentences.",
+      "criteria": "Pass only if the answer states that ice is less dense than liquid water because the solid structure holds the molecules farther apart. Saying that ice is cold or light, without density, is not sufficient. Do not treat length or confidence as evidence."
+    },
+    {
+      "id": "reason-ice-2",
+      "split": "held_out",
+      "category": "reasoning",
+      "method": "rubric",
+      "group_id": "reason-ice",
+      "prompt": "Explain why solid ice stays on top of liquid water. Use two sentences.",
+      "criteria": "Pass only if the answer states that ice is less dense than liquid water because the solid structure holds the molecules farther apart. Saying that ice is cold or light, without density, is not sufficient. Do not treat length or confidence as evidence."
+    },
+    {
+      "id": "code-len-router-1",
+      "split": "calibration",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-len-router",
+      "prompt": "In Python, what is len('router')? Reply with only the integer.",
+      "expected": "6"
+    },
+    {
+      "id": "code-len-router-2",
+      "split": "calibration",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-len-router",
+      "prompt": "What does len('router') evaluate to in Python? Reply with only the integer.",
+      "expected": "6"
+    },
+    {
+      "id": "code-pow-34-1",
+      "split": "calibration",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-pow-34",
+      "prompt": "What does Python print for 3 ** 4? Reply with only the integer.",
+      "expected": "81"
+    },
+    {
+      "id": "code-pow-34-2",
+      "split": "calibration",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-pow-34",
+      "prompt": "In Python, what is the value of 3 ** 4? Reply with only the integer.",
+      "expected": "81"
+    },
+    {
+      "id": "code-sum-range-1",
+      "split": "calibration",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-sum-range",
+      "prompt": "What is the value of sum(range(4)) in Python? Reply with only the integer.",
+      "expected": "6"
+    },
+    {
+      "id": "code-sum-range-2",
+      "split": "calibration",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-sum-range",
+      "prompt": "In Python, what does sum(range(4)) evaluate to? Reply with only the integer.",
+      "expected": "6"
+    },
+    {
+      "id": "code-upper-1",
+      "split": "calibration",
+      "category": "coding",
+      "method": "exact",
+      "group_id": "code-upper",
+      "prompt": "In Python, what does 'ab'.upper() evaluate to? Reply with only the result.",
+      "expected": "AB"
+    },
+    {
+      "id": "code-upper-2",
+      "split": "calibration",
+      "category": "coding",
+      "method": "exact",
+      "group_id": "code-upper",
+      "prompt": "What is the value of 'ab'.upper() in Python? Reply with only that value.",
+      "expected": "AB"
+    },
+    {
+      "id": "code-binary-1",
+      "split": "held_out",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-binary",
+      "prompt": "In Python, what is int('10', 2)? Reply with only the integer.",
+      "expected": "2"
+    },
+    {
+      "id": "code-binary-2",
+      "split": "held_out",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-binary",
+      "prompt": "What does int('10', 2) evaluate to in Python? Reply with only the integer.",
+      "expected": "2"
+    },
+    {
+      "id": "code-last-1",
+      "split": "held_out",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-last",
+      "prompt": "In Python, what is [1, 2, 3][-1]? Reply with only the integer.",
+      "expected": "3"
+    },
+    {
+      "id": "code-last-2",
+      "split": "held_out",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-last",
+      "prompt": "What is the last item of [1, 2, 3] in Python? Reply with only the integer.",
+      "expected": "3"
+    },
+    {
+      "id": "code-min-1",
+      "split": "held_out",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-min",
+      "prompt": "In Python, what is min(4, 9, 2)? Reply with only the integer.",
+      "expected": "2"
+    },
+    {
+      "id": "code-min-2",
+      "split": "held_out",
+      "category": "coding",
+      "method": "numeric",
+      "group_id": "code-min",
+      "prompt": "What does min(4, 9, 2) evaluate to in Python? Reply with only the integer.",
+      "expected": "2"
+    },
+    {
+      "id": "code-false-1",
+      "split": "held_out",
+      "category": "coding",
+      "method": "exact",
+      "group_id": "code-false",
+      "prompt": "In Python, what is bool(0)? Reply with only the result.",
+      "expected": "False"
+    },
+    {
+      "id": "code-false-2",
+      "split": "held_out",
+      "category": "coding",
+      "method": "exact",
+      "group_id": "code-false",
+      "prompt": "What does bool(0) evaluate to in Python? Reply with only that result.",
+      "expected": "False"
+    },
+    {
+      "id": "struct-ottawa-1",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-ottawa",
+      "prompt": "Return a JSON object with keys city and country for the capital of Canada. Use no surrounding text.",
+      "smoke": true,
+      "expected": {
+        "city": "Ottawa",
+        "country": "Canada"
+      }
+    },
+    {
+      "id": "struct-ottawa-2",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-ottawa",
+      "prompt": "Respond with only a JSON object whose city is the capital of Canada and whose country is Canada.",
+      "expected": {
+        "city": "Ottawa",
+        "country": "Canada"
+      }
+    },
+    {
+      "id": "struct-pair-1",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-pair",
+      "prompt": "Return a JSON object with keys left and right set to 2 and 5. Use no surrounding text.",
+      "expected": {
+        "left": 2,
+        "right": 5
+      }
+    },
+    {
+      "id": "struct-pair-2",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-pair",
+      "prompt": "Respond with only a JSON object. Set left to 2 and right to 5.",
+      "expected": {
+        "left": 2,
+        "right": 5
+      }
+    },
+    {
+      "id": "struct-status-1",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-status",
+      "prompt": "Return a JSON object with keys status and count. status must be ok and count must be 1. Use no surrounding text.",
+      "expected": {
+        "status": "ok",
+        "count": 1
+      }
+    },
+    {
+      "id": "struct-status-2",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-status",
+      "prompt": "Respond with only a JSON object. Set status to ok and count to 1.",
+      "expected": {
+        "status": "ok",
+        "count": 1
+      }
+    },
+    {
+      "id": "struct-enabled-1",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-enabled",
+      "prompt": "Return a JSON object with key enabled set to true. Use no surrounding text.",
+      "expected": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "struct-enabled-2",
+      "split": "calibration",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-enabled",
+      "prompt": "Respond with only a JSON object whose enabled field is true.",
+      "expected": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "struct-white-1",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-white",
+      "prompt": "Return a JSON object with keys red, green, and blue set to 255, 255, and 255. Use no surrounding text.",
+      "expected": {
+        "red": 255,
+        "green": 255,
+        "blue": 255
+      }
+    },
+    {
+      "id": "struct-white-2",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-white",
+      "prompt": "Respond with only a JSON object. Set red, green, and blue each to 255.",
+      "expected": {
+        "red": 255,
+        "green": 255,
+        "blue": 255
+      }
+    },
+    {
+      "id": "struct-hopper-1",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-hopper",
+      "prompt": "Return a JSON object with keys name and year. name must be Grace Hopper and year must be 1906. Use no surrounding text.",
+      "expected": {
+        "name": "Grace Hopper",
+        "year": 1906
+      }
+    },
+    {
+      "id": "struct-hopper-2",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-hopper",
+      "prompt": "Respond with only a JSON object. Set name to Grace Hopper and year to 1906.",
+      "expected": {
+        "name": "Grace Hopper",
+        "year": 1906
+      }
+    },
+    {
+      "id": "struct-point-1",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-point",
+      "prompt": "Return a JSON object with keys x and y set to 3 and 4. Use no surrounding text.",
+      "expected": {
+        "x": 3,
+        "y": 4
+      }
+    },
+    {
+      "id": "struct-point-2",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-point",
+      "prompt": "Respond with only a JSON object. Set x to 3 and y to 4.",
+      "expected": {
+        "x": 3,
+        "y": 4
+      }
+    },
+    {
+      "id": "struct-python-1",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-python",
+      "prompt": "Return a JSON object with keys language and typed. language must be Python and typed must be false. Use no surrounding text.",
+      "expected": {
+        "language": "Python",
+        "typed": false
+      }
+    },
+    {
+      "id": "struct-python-2",
+      "split": "held_out",
+      "category": "structured",
+      "method": "json_fields",
+      "group_id": "struct-python",
+      "prompt": "Respond with only a JSON object. Set language to Python and typed to false.",
+      "expected": {
+        "language": "Python",
+        "typed": false
+      }
+    },
+    {
+      "id": "instr-ready-1",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-ready",
+      "prompt": "Reply with exactly the word ready.",
+      "expected": "ready"
+    },
+    {
+      "id": "instr-ready-2",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-ready",
+      "prompt": "Return exactly this word and nothing else: ready",
+      "expected": "ready"
+    },
+    {
+      "id": "instr-two-1",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-two",
+      "prompt": "Reply with exactly the word two.",
+      "expected": "two"
+    },
+    {
+      "id": "instr-two-2",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-two",
+      "prompt": "Return exactly this word and nothing else: two",
+      "expected": "two"
+    },
+    {
+      "id": "instr-compass-1",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-compass",
+      "prompt": "Reply with exactly these two words and no punctuation: north south",
+      "expected": "north south"
+    },
+    {
+      "id": "instr-compass-2",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-compass",
+      "prompt": "Return exactly these two words and nothing else: north south",
+      "expected": "north south"
+    },
+    {
+      "id": "instr-digit-1",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-digit",
+      "prompt": "Reply with exactly the digit 9.",
+      "expected": "9"
+    },
+    {
+      "id": "instr-digit-2",
+      "split": "calibration",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-digit",
+      "prompt": "Return exactly this digit and nothing else: 9",
+      "expected": "9"
+    },
+    {
+      "id": "instr-pong-1",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-pong",
+      "prompt": "Reply with exactly the word pong.",
+      "expected": "pong"
+    },
+    {
+      "id": "instr-pong-2",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-pong",
+      "prompt": "Return exactly this word and nothing else: pong",
+      "expected": "pong"
+    },
+    {
+      "id": "instr-lower-1",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-lower",
+      "prompt": "Reply with exactly the word lowercase.",
+      "expected": "lowercase"
+    },
+    {
+      "id": "instr-lower-2",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-lower",
+      "prompt": "Return exactly this word and nothing else: lowercase",
+      "expected": "lowercase"
+    },
+    {
+      "id": "instr-csv-1",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-csv",
+      "prompt": "Reply with exactly these characters and nothing else: a,b,c",
+      "expected": "a,b,c"
+    },
+    {
+      "id": "instr-csv-2",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-csv",
+      "prompt": "Return exactly this text and nothing else: a,b,c",
+      "expected": "a,b,c"
+    },
+    {
+      "id": "instr-code-1",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-code",
+      "prompt": "Reply with exactly this text and nothing else: OK-1",
+      "expected": "OK-1"
+    },
+    {
+      "id": "instr-code-2",
+      "split": "held_out",
+      "category": "instruction",
+      "method": "exact",
+      "group_id": "instr-code",
+      "prompt": "Return exactly these four characters and nothing else: OK-1",
+      "expected": "OK-1"
+    }
+  ]
+}
