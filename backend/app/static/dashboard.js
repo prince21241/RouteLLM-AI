@@ -24,27 +24,36 @@ const empty = document.querySelector("#empty");
 const content = document.querySelector("#content");
 const demoBanner = document.querySelector("#demo-banner");
 const cards = document.querySelector("#cards");
+const secondary = document.querySelector("#secondary-metrics");
+const costSummary = document.querySelector("#cost-summary");
 const daysBody = document.querySelector("#days");
 const notes = document.querySelector("#notes");
+const costNotes = document.querySelector("#cost-notes");
 const modelsBody = document.querySelector("#models");
 const judgesBody = document.querySelector("#judges");
 const breakdownNotes = document.querySelector("#breakdown-notes");
 const historyBody = document.querySelector("#history");
+const recentBody = document.querySelector("#recent");
 const pageLabel = document.querySelector("#page-label");
+const filterScope = document.querySelector("#filter-scope");
 const prev = document.querySelector("#prev");
 const next = document.querySelector("#next");
 const volumeChart = document.querySelector("#volume-chart");
 const costChart = document.querySelector("#cost-chart");
+const volumeTip = document.querySelector("#volume-tip");
+const costTip = document.querySelector("#cost-tip");
 const detail = document.querySelector("#detail");
 const detailStatus = document.querySelector("#detail-status");
 const detailRetry = document.querySelector("#detail-retry");
 const detailBody = document.querySelector("#detail-body");
+const detailClose = document.querySelector("#detail-close");
 
 const demoMode = new URLSearchParams(location.search).get("demo");
 let offset = 0;
 let latestTotal = 0;
 let demoBundle = null;
 let openRequestId = null;
+let detailOpener = null;
 
 filtersForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -72,13 +81,42 @@ detailRetry.addEventListener("click", () => {
     loadDetail(openRequestId);
   }
 });
+detailClose.addEventListener("click", closeDetail);
+detail.addEventListener("keydown", (event) => {
+  if (detail.hidden) {
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeDetail();
+    return;
+  }
+  if (event.key !== "Tab") {
+    return;
+  }
+  const focusable = [...detail.querySelectorAll("button, a, input, select, textarea")].filter(
+    (node) => !node.hidden && !node.disabled,
+  );
+  if (!focusable.length) {
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
 
-historyBody.addEventListener("click", (event) => {
+content.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-id]");
   if (!button) {
     return;
   }
-  loadDetail(button.dataset.id);
+  loadDetail(button.dataset.id, button);
 });
 
 load();
@@ -91,6 +129,7 @@ async function load() {
     renderOverview(bundle.overview);
     renderBreakdown(bundle.breakdown);
     renderHistory(bundle.history);
+    renderRecent(bundle.recent.items);
     applyPanel({
       loading: false,
       error: "",
@@ -128,32 +167,54 @@ async function loadBundle() {
       }
       demoBundle = await response.json();
     }
+    const history = pageDemoHistory(demoBundle.history);
     return {
       overview: demoBundle.overview,
       breakdown: demoBundle.breakdown,
-      history: pageDemoHistory(demoBundle.history),
+      history,
+      recent: {
+        items: demoBundle.history.items.slice(0, 5),
+        total: demoBundle.history.items.length,
+      },
     };
   }
   demoBanner.hidden = true;
-  const query = currentQuery();
-  const [overview, breakdown, history] = await Promise.all([
-    getJson(`/api/v1/dashboard/overview${query}`),
-    getJson(`/api/v1/dashboard/breakdown${query}`),
-    getJson(`/api/v1/dashboard/requests${query}`),
+  const [overview, breakdown, history, recent] = await Promise.all([
+    getJson(`/api/v1/dashboard/overview${currentQuery()}`),
+    getJson(`/api/v1/dashboard/breakdown${currentQuery()}`),
+    getJson(`/api/v1/dashboard/requests${currentQuery()}`),
+    getJson(`/api/v1/dashboard/requests${currentQuery({ limit: 5, offset: 0 })}`),
   ]);
-  return { overview, breakdown, history };
+  return { overview, breakdown, history, recent };
 }
 
-function currentQuery() {
+function currentQuery(overrides = {}) {
   const data = new FormData(filtersForm);
+  const extra = [];
+  const model = String(data.get("model") || "").trim();
+  const provider = String(data.get("provider") || "");
+  const status = String(data.get("status") || "");
+  if (model) {
+    extra.push(`initial model ${model}`);
+  }
+  if (provider) {
+    extra.push(`initial provider ${provider}`);
+  }
+  if (status) {
+    extra.push(`status ${status}`);
+  }
+  filterScope.textContent =
+    extra.length && document.body.dataset.route === "overview"
+      ? `Date range also uses ${extra.join(", ")}. Change those on Requests, Costs & Usage, or Providers & Models.`
+      : "";
   return apiQuery({
     from: String(data.get("from") || ""),
     to: String(data.get("to") || ""),
-    model: String(data.get("model") || "").trim(),
-    provider: String(data.get("provider") || ""),
-    status: String(data.get("status") || ""),
-    limit: pageSize,
-    offset,
+    model,
+    provider,
+    status,
+    limit: overrides.limit ?? pageSize,
+    offset: overrides.offset ?? offset,
   });
 }
 
@@ -184,53 +245,63 @@ function applyPanel(state) {
 
 function clearPanels() {
   cards.replaceChildren();
+  secondary.replaceChildren();
+  costSummary.replaceChildren();
   daysBody.replaceChildren();
   notes.replaceChildren();
+  costNotes.replaceChildren();
   modelsBody.replaceChildren();
   judgesBody.replaceChildren();
   breakdownNotes.replaceChildren();
   historyBody.replaceChildren();
+  recentBody.replaceChildren();
   clearChart(volumeChart);
   clearChart(costChart);
+  volumeTip.textContent = "";
+  costTip.textContent = "";
 }
 
 function renderOverview(overview) {
   const latency = overview.request_latency_ms;
   const attemptLatency = overview.attempt_latency_ms;
-  const cardRows = [
+  fillMetrics(cards, [
     ["Requests", String(overview.request_count), "Logical chat requests"],
-    ["Attempts", String(overview.attempt_count), "Generation calls, counted separately"],
-    ["Recorded cost", formatCost(overview.request_cost), "Request totals, split by completeness"],
-    ["Judge cost", formatCost(overview.judge_cost), "Recorded judge component, not added again"],
+    ["Recorded cost", formatCost(overview.request_cost), "Unknown amounts are not shown as zero"],
     ["Error rate", formatRate(overview.error_rate), "Failed requests. Pending is not an error."],
+    [
+      "Median latency",
+      latency.p50 === null ? "unknown" : `${latency.p50} ms`,
+      `End-to-end p50. ${latency.known_count} recorded, ${latency.missing_count} missing.`,
+    ],
+  ]);
+  fillMetrics(secondary, [
+    ["Attempts", String(overview.attempt_count), "Generation calls, counted separately"],
+    ["Fallback rate", formatRate(overview.fallback_rate), "Rows with a recorded fallback flag"],
     ["Escalation rate", formatRate(overview.escalation_rate), "Quality escalation, not provider fallback"],
-    ["Fallback rate", formatRate(overview.fallback_rate), "Uses rows with a recorded fallback flag"],
-    [
-      "Request latency",
-      latency.p50 === null ? "unknown" : `${latency.p50} ms p50`,
-      `${latency.known_count} recorded, ${latency.missing_count} missing. End-to-end.`,
-    ],
-    [
-      "Attempt latency",
-      attemptLatency.p50 === null ? "unknown" : `${attemptLatency.p50} ms p50`,
-      `${attemptLatency.known_count} recorded, ${attemptLatency.missing_count} missing. Provider calls.`,
-    ],
+    ["Judge cost", formatCost(overview.judge_cost), "Not added again onto the request total"],
     [
       "Savings estimate",
       overview.savings_estimate === null ? "unknown" : `${overview.savings_estimate} USD`,
       "Same-token-volume estimate. The premium model was not called.",
     ],
-  ];
-  cards.replaceChildren(
-    ...cardRows.map(([label, value, note]) => {
-      const card = el("article", "", "card");
-      card.append(el("span", label), el("strong", value), el("span", note));
-      return card;
-    }),
-  );
+    [
+      "Attempt latency",
+      attemptLatency.p50 === null ? "unknown" : `${attemptLatency.p50} ms`,
+      `Provider-call p50. ${attemptLatency.known_count} recorded, ${attemptLatency.missing_count} missing.`,
+    ],
+  ]);
+  fillMetrics(costSummary, [
+    ["Recorded request cost", formatCost(overview.request_cost), "Complete and estimated stay separate"],
+    ["Judge cost", formatCost(overview.judge_cost), "Identified separately and not added again"],
+    [
+      "Savings estimate",
+      overview.savings_estimate === null ? "unknown" : `${overview.savings_estimate} USD`,
+      `${overview.savings_known_requests} known, ${overview.savings_unknown_requests} unknown. Basis: ${overview.savings_basis}.`,
+    ],
+  ]);
   const series = costSeries(overview.by_day);
-  drawVolume(volumeChart, series);
-  drawCost(costChart, series);
+  drawVolume(volumeChart, series, volumeTip);
+  drawCost(costChart, series, costTip);
   daysBody.replaceChildren(
     ...overview.by_day.map((day) => {
       const row = document.createElement("tr");
@@ -245,6 +316,17 @@ function renderOverview(overview) {
     }),
   );
   notes.replaceChildren(...overview.notes.map((note) => el("li", note)));
+  costNotes.replaceChildren(...overview.notes.map((note) => el("li", note)));
+}
+
+function fillMetrics(container, rows) {
+  container.replaceChildren(
+    ...rows.map(([label, value, hint]) => {
+      const card = el("div", "", "card");
+      card.append(el("span", label), el("strong", value), el("span", hint, "hint"));
+      return card;
+    }),
+  );
 }
 
 function renderBreakdown(breakdown) {
@@ -252,9 +334,11 @@ function renderBreakdown(breakdown) {
     ...(breakdown.models.length
       ? breakdown.models.map((item) => {
           const row = document.createElement("tr");
+          const model = el("td");
+          model.append(el("span", item.model, "model-name"));
           row.append(
             cell(item.provider),
-            cell(item.model),
+            model,
             cell(String(item.attempt_count), true),
             cell(String(item.request_count), true),
             cell(String(item.failed_attempts), true),
@@ -291,43 +375,60 @@ function renderHistory(history) {
   pageLabel.textContent = `${start}–${end} of ${history.total} requests. Prompt previews are truncated.`;
   prev.disabled = history.offset === 0;
   next.disabled = history.offset + history.items.length >= history.total;
-  historyBody.replaceChildren(
-    ...history.items.map((item) => {
-      const row = document.createElement("tr");
-      const preview = el("button", item.prompt_preview, "linkish");
-      preview.type = "button";
-      preview.dataset.id = item.request_id;
-      const previewCell = document.createElement("td");
-      previewCell.append(preview);
-      if (item.prompt_truncated) {
-        previewCell.append(el("span", " truncated"));
-      }
-      row.append(
-        cell(formatTime(item.created_at), true),
-        previewCell,
-        cell(item.status),
-        cell(`${item.provider} / ${item.model}`),
-        cell(finalRoute(item)),
-        cell(String(item.attempt_count), true),
-        cell(item.total_cost === null ? `unknown (${item.cost_completeness})` : `${item.total_cost} USD (${item.cost_completeness})`, true),
-        cell(item.end_to_end_latency_ms === null ? "unknown" : String(item.end_to_end_latency_ms), true),
-        cell(qualityLabel(item.quality_verdict)),
-        cell(item.escalated ? "yes" : "no"),
-        cell(fallbackLabel(item.fallback_used)),
-      );
-      return row;
-    }),
+  historyBody.replaceChildren(...history.items.map((item) => requestRow(item)));
+}
+
+function renderRecent(items) {
+  recentBody.replaceChildren(
+    ...(items.length
+      ? items.map((item) => requestRow(item))
+      : [emptyRow(6, "No recent requests in this filter.")]),
   );
 }
 
-async function loadDetail(requestId) {
+function requestRow(item) {
+  const row = document.createElement("tr");
+  const preview = el("button", item.prompt_preview, "linkish");
+  preview.type = "button";
+  preview.dataset.id = item.request_id;
+  const previewCell = document.createElement("td");
+  previewCell.append(preview);
+  if (item.prompt_truncated) {
+    previewCell.append(el("span", " truncated", "note"));
+  }
+  const statusCell = document.createElement("td");
+  statusCell.append(statusBadge(item.status));
+  const modelCell = document.createElement("td");
+  modelCell.append(el("span", finalModel(item), "model-name"));
+  row.append(
+    timeCell(item.created_at),
+    previewCell,
+    statusCell,
+    modelCell,
+    cell(item.total_cost === null ? `unknown (${item.cost_completeness})` : `${item.total_cost} USD (${item.cost_completeness})`, true),
+    cell(item.end_to_end_latency_ms === null ? "unknown" : `${item.end_to_end_latency_ms} ms`, true),
+  );
+  return row;
+}
+
+async function loadDetail(requestId, opener) {
+  if (opener) {
+    detailOpener = opener;
+  }
   openRequestId = requestId;
-  location.hash = `request=${requestId}`;
+  const nextUrl = `/requests#request=${encodeURIComponent(requestId)}`;
+  const currentUrl = `${location.pathname}${location.hash}`;
+  if (currentUrl !== nextUrl) {
+    const method = location.hash.startsWith("#request=") ? "replaceState" : "pushState";
+    history[method](null, "", nextUrl);
+    window.routellmApplyRoute?.();
+  }
   detail.hidden = false;
   detailBody.replaceChildren();
   detailRetry.hidden = true;
   detailStatus.className = "";
   detailStatus.textContent = "Loading request…";
+  detailClose.focus();
   const state = detailState({ loading: true, error: "", request: null });
   if (state !== "loading") {
     return;
@@ -343,6 +444,19 @@ async function loadDetail(requestId) {
   }
 }
 
+function closeDetail() {
+  detail.hidden = true;
+  openRequestId = null;
+  if (location.hash.startsWith("#request=")) {
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+    window.routellmApplyRoute?.();
+  }
+  if (detailOpener && typeof detailOpener.focus === "function") {
+    detailOpener.focus();
+  }
+  detailOpener = null;
+}
+
 function renderDetail(request) {
   const model = detailModel(request);
   const finals = resolvedFinal(request);
@@ -355,11 +469,14 @@ function renderDetail(request) {
   detailStatus.textContent = model.persistence;
   const body = document.createElement("div");
   body.append(definitionList([
+    ["Created", readableUtc(request.created_at)],
+    ["Exact created time", exactUtc(request.created_at)],
     ["Status", model.status],
     ["Initial provider", model.initialProvider],
     ["Initial model", model.initialModel],
     ["Final provider", finals.provider || "Not recorded"],
     ["Final model", finals.model || "Not recorded"],
+    ["Attempts", String(model.attempts.length)],
     ["Escalated", model.escalated ? "yes" : "no"],
     ["Escalation reason", actionReason(model.escalated, model.escalationReason)],
     ["Escalation error", actionReason(model.escalated, model.escalationError)],
@@ -398,7 +515,6 @@ function renderDetail(request) {
   body.append(el("h3", "Evaluations"));
   body.append(model.evaluations.length ? evaluationTable(model.evaluations) : el("p", "No quality check was stored.", "empty"));
   detailBody.replaceChildren(body);
-  detail.scrollIntoView({ block: "start" });
 }
 
 function attemptTable(attempts) {
@@ -479,54 +595,112 @@ function list(items) {
   return node;
 }
 
-function drawVolume(svg, series) {
-  drawChart(svg, series, [
-    { key: "requests", color: "#1f6b4a", label: "Requests" },
-  ]);
+function drawVolume(svg, series, tip) {
+  drawChart(svg, series, [{ key: "requests", color: "#0f766e", label: "Requests" }], tip);
 }
 
-function drawCost(svg, series) {
-  drawChart(svg, series, [
-    { key: "complete", color: "#1f6b4a", label: "Complete" },
-    { key: "estimated", color: "#8a6a2f", label: "Estimated" },
-  ]);
+function drawCost(svg, series, tip) {
+  drawChart(
+    svg,
+    series,
+    [
+      { key: "complete", color: "#0f766e", label: "Complete USD" },
+      { key: "estimated", color: "#b45309", label: "Estimated USD" },
+    ],
+    tip,
+  );
 }
 
-function drawChart(svg, series, marks) {
+function drawChart(svg, series, marks, tip) {
   clearChart(svg);
-  const width = Math.max(series.length * 48, 280);
-  const height = 180;
+  const width = 720;
+  const height = 280;
+  const padLeft = 52;
+  const padRight = 12;
+  const padTop = 16;
+  const padBottom = 36;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
   if (!series.length) {
-    svg.append(svgText(12, 24, "No days in this range."));
+    svg.append(svgText(padLeft, 40, "No days in this range."));
+    if (tip) {
+      tip.textContent = "No days in this range.";
+    }
     return;
   }
   const values = series.flatMap((point) => marks.map((mark) => point[mark.key])).filter((value) => value !== null);
   if (!values.length) {
-    svg.append(svgText(12, 24, "No recorded values in this range."));
+    svg.append(svgText(padLeft, 40, "No recorded values in this range."));
+    if (tip) {
+      tip.textContent = "No recorded values in this range. Unknown costs are omitted.";
+    }
     return;
   }
   const max = Math.max(...values, 0);
   const top = max === 0 ? 1 : max;
-  const groupWidth = width / series.length;
-  const barWidth = Math.min(18, Math.max(groupWidth / (marks.length + 1), 6));
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+  const baseline = padTop + plotHeight;
+  axisLine(svg, padLeft, padTop, padLeft, baseline);
+  axisLine(svg, padLeft, baseline, width - padRight, baseline);
+  [0, 0.5, 1].forEach((step) => {
+    const value = top * step;
+    const y = baseline - step * plotHeight;
+    svg.append(svgText(4, y + 4, axisLabel(value)));
+  });
+  const groupWidth = plotWidth / series.length;
+  const barWidth = Math.min(18, Math.max(groupWidth / (marks.length + 1), 4));
+  const labelStep = series.length > 12 ? Math.ceil(series.length / 8) : 1;
   series.forEach((point, index) => {
     marks.forEach((mark, markIndex) => {
       const value = point[mark.key];
       if (value === null) {
         return;
       }
-      const barHeight = top === 0 ? 0 : (value / top) * 120;
+      const barHeight = (value / top) * plotHeight;
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.setAttribute("x", String(index * groupWidth + markIndex * (barWidth + 4) + 8));
-      rect.setAttribute("y", String(140 - barHeight));
-      rect.setAttribute("width", String(barWidth - 2));
+      const x = padLeft + index * groupWidth + markIndex * (barWidth + 3) + 4;
+      rect.setAttribute("x", String(x));
+      rect.setAttribute("y", String(baseline - Math.max(barHeight, value === 0 ? 1 : 0)));
+      rect.setAttribute("width", String(Math.max(barWidth - 2, 2)));
       rect.setAttribute("height", String(Math.max(barHeight, value === 0 ? 1 : 0)));
       rect.setAttribute("fill", mark.color);
+      rect.setAttribute("tabindex", "0");
+      const description = `${point.day} ${mark.label}: ${value}`;
+      rect.append(svgTitle(description));
+      const show = () => {
+        if (tip) {
+          tip.textContent = description;
+        }
+      };
+      rect.addEventListener("pointerenter", show);
+      rect.addEventListener("focus", show);
       svg.append(rect);
     });
-    svg.append(svgText(index * groupWidth + 6, 168, String(point.day).slice(5)));
+    if (index % labelStep === 0) {
+      svg.append(svgText(padLeft + index * groupWidth, height - 12, String(point.day).slice(5)));
+    }
   });
+}
+
+function axisLine(svg, x1, y1, x2, y2) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", String(x1));
+  line.setAttribute("y1", String(y1));
+  line.setAttribute("x2", String(x2));
+  line.setAttribute("y2", String(y2));
+  line.setAttribute("stroke", "#cbd5e1");
+  svg.append(line);
+}
+
+function axisLabel(value) {
+  if (value === 0) {
+    return "0";
+  }
+  if (value >= 100) {
+    return String(Math.round(value));
+  }
+  return String(Number(value.toPrecision(3)));
 }
 
 function clearChart(svg) {
@@ -537,8 +711,14 @@ function svgText(x, y, text) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
   node.setAttribute("x", String(x));
   node.setAttribute("y", String(y));
-  node.setAttribute("fill", "#5c564c");
-  node.setAttribute("font-size", "11");
+  node.setAttribute("fill", "#526072");
+  node.setAttribute("font-size", "12");
+  node.textContent = text;
+  return node;
+}
+
+function svgTitle(text) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", "title");
   node.textContent = text;
   return node;
 }
@@ -561,7 +741,6 @@ function pageDemoHistory(history) {
 }
 
 function emptyBundle() {
-  const filters = { start: null, end: null, model: null, provider: null, status: null };
   return {
     overview: {
       request_count: 0,
@@ -574,12 +753,15 @@ function emptyBundle() {
       request_cost: { complete: null, estimated: null, unknown_count: 0 },
       judge_cost: { complete: null, estimated: null, unknown_count: 0 },
       savings_estimate: null,
+      savings_known_requests: 0,
+      savings_unknown_requests: 0,
+      savings_basis: "same_token_volume",
       by_day: [],
       notes: ["Demo empty state. Missing costs stay blank."],
     },
     breakdown: { models: [], judges: [], notes: [] },
     history: { items: [], limit: pageSize, offset: 0, total: 0 },
-    filters,
+    recent: { items: [], total: 0 },
   };
 }
 
@@ -593,11 +775,8 @@ function requestIdFromHash() {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function finalRoute(item) {
-  if (!item.final_provider && !item.final_model) {
-    return "Not recorded";
-  }
-  return `${item.final_provider || "Not recorded"} / ${item.final_model || "Not recorded"}`;
+function finalModel(item) {
+  return item.final_model || "Not recorded";
 }
 
 function fallbackLabel(value) {
@@ -611,10 +790,46 @@ function blankMoney(value) {
   return value === null || value === undefined ? "unknown" : String(value);
 }
 
-function formatTime(value) {
+function statusBadge(status) {
+  const kind = status === "succeeded" ? "ok" : status === "failed" ? "bad" : status === "pending" ? "warn" : "neutral";
+  return el("span", status, `badge badge-${kind}`);
+}
+
+function timeCell(value) {
+  const td = document.createElement("td");
+  const stack = document.createElement("div");
+  stack.className = "time-stack";
+  stack.append(el("span", readableUtc(value)));
+  const exact = document.createElement("time");
+  exact.className = "exact-time";
+  const iso = exactUtc(value);
+  exact.dateTime = iso;
+  exact.textContent = iso;
+  stack.append(exact);
+  td.append(stack);
+  return td;
+}
+
+function readableUtc(value) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return value;
+    return String(value ?? "unknown");
+  }
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+  return `${formatted} UTC`;
+}
+
+function exactUtc(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value ?? "unknown");
   }
   return parsed.toISOString().replace(".000Z", "Z");
 }

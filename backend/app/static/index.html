@@ -3,89 +3,320 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RouteLLM</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <title>RouteLLM · Chat</title>
+    <link rel="stylesheet" href="/static/styles.css?v=10" />
   </head>
-  <body>
-    <header class="top">
-      <div>
+  <body data-route="chat">
+    <script>
+      (function () {
+        var routes = {
+          "/": "chat",
+          "/overview": "overview",
+          "/dashboard": "overview",
+          "/requests": "requests",
+          "/costs": "costs",
+          "/providers": "providers",
+        };
+        var route = location.hash.indexOf("#request=") === 0 ? "requests" : routes[location.pathname] || "chat";
+        document.body.dataset.route = route;
+      })();
+    </script>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="app">
+      <aside id="sidebar" class="sidebar">
         <p class="mark">RouteLLM</p>
-        <h1>Chat</h1>
         <nav class="nav" aria-label="Pages">
-          <a href="/" aria-current="page">Chat</a>
-          <a href="/dashboard">Dashboard</a>
+          <a href="/" data-nav="chat">Chat</a>
+          <a href="/overview" data-nav="overview">Overview</a>
+          <a href="/requests" data-nav="requests">Requests</a>
+          <a href="/costs" data-nav="costs">Costs &amp; Usage</a>
+          <a href="/providers" data-nav="providers">Providers &amp; Models</a>
         </nav>
-      </div>
-      <p id="ready" class="ready">Checking the API…</p>
-    </header>
-
-    <main class="layout">
-      <section class="composer-panel" aria-labelledby="composer-heading">
-        <h2 id="composer-heading">Prompt</h2>
-        <p id="independence" class="note">Each send is a new request. Earlier messages are not included.</p>
-        <form id="chat-form">
-          <label for="prompt">Message</label>
-          <textarea id="prompt" name="prompt" rows="6" required placeholder="Ask a question"></textarea>
-
-          <label for="system-prompt">System prompt <span>optional</span></label>
-          <textarea id="system-prompt" name="system_prompt" rows="2" placeholder="Leave blank to omit"></textarea>
-
-          <label for="provider">Routing</label>
-          <select id="provider" name="provider">
-            <option value="">Automatic routing</option>
-          </select>
-          <p id="provider-status" class="note">Loading routing choices…</p>
-          <ul id="feature-status" class="feature-list"></ul>
-          <p class="note">API keys stay on the server. Limiting a provider sends this prompt only to that provider and can spend that account’s usage.</p>
-
-          <button id="send" type="submit">Send</button>
-          <p id="pending-status" class="note" role="status" hidden>Sending…</p>
-          <p id="form-status" class="note" role="status"></p>
-          <p id="error" class="error" role="alert" hidden></p>
-        </form>
-      </section>
-
-      <section class="answer-panel" aria-labelledby="answer-heading">
-        <h2 id="answer-heading">Answer</h2>
-        <p id="empty" class="empty">Send a prompt to see the routed answer, cost, and savings.</p>
-        <article id="answer" hidden>
-          <p id="answer-banner" class="banner"></p>
-          <div id="answer-text" class="markdown"></div>
-          <details id="details">
-            <summary>Request details</summary>
-            <dl id="facts" class="facts"></dl>
-            <h3>Attempts</h3>
-            <p id="attempts-empty" class="note">Attempt rows appear when the saved request is loaded.</p>
-            <div class="table-wrap">
-              <table id="attempts">
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">Purpose</th>
-                    <th scope="col">Provider</th>
-                    <th scope="col">Model</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Tokens</th>
-                    <th scope="col">Latency</th>
-                    <th scope="col">Cost</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <p id="savings-note" class="note"></p>
-            <p id="dashboard-link-row"><a id="dashboard-link" href="/dashboard">Open this request in the dashboard</a></p>
-          </details>
-          <button id="use-prompt" type="button" hidden>Use this prompt</button>
-        </article>
-      </section>
-
-      <aside class="history-panel" aria-labelledby="history-heading">
-        <h2 id="history-heading">History</h2>
-        <p id="history-status" class="empty">Loading stored requests…</p>
-        <ol id="history"></ol>
       </aside>
-    </main>
-    <script type="module" src="/static/app.js?v=5"></script>
+      <div id="nav-backdrop" class="backdrop" hidden></div>
+
+      <div class="workspace">
+        <header class="top">
+          <button id="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+          <h1 id="page-title">Chat</h1>
+          <p id="ready" class="ready" data-state="checking">Checking the API… Local use only.</p>
+        </header>
+
+        <main id="main" tabindex="-1">
+          <section id="page-chat" data-page="chat" aria-labelledby="page-title">
+            <div class="chat-column">
+              <div class="chat-toolbar">
+                <p id="independence" class="note">Each prompt is routed independently; previous messages aren’t sent.</p>
+                <button id="use-prompt" class="secondary" type="button" hidden>Use this prompt</button>
+                <button id="history-toggle" class="secondary" type="button" aria-expanded="false" aria-controls="chat-history-panel">History</button>
+              </div>
+              <div id="thread" class="thread">
+                <div id="chat-empty" class="chat-empty">
+                  <h2>What would you like to route?</h2>
+                  <div id="examples" class="examples">
+                    <button class="example" type="button" data-example="Explain what an API is in two sentences">Explain what an API is in two sentences</button>
+                    <button class="example" type="button" data-example="What is 17 × 24?">What is 17 × 24?</button>
+                    <button class="example" type="button" data-example="Write a Python function that returns the larger of two numbers">Write a Python function that returns the larger of two numbers</button>
+                  </div>
+                </div>
+                <ol id="messages" class="messages" aria-live="polite"></ol>
+              </div>
+              <div class="composer-dock">
+                <p id="pending-status" class="visually-hidden" role="status" hidden>Sending…</p>
+                <form id="chat-form">
+                  <h2 id="composer-heading" class="visually-hidden">Prompt</h2>
+                  <div id="options-panel" class="options-panel" hidden>
+                    <p id="context-note" class="note"></p>
+                    <label for="system-prompt">System prompt <span>optional</span></label>
+                    <textarea id="system-prompt" name="system_prompt" rows="2" placeholder="Leave blank to omit"></textarea>
+                    <label for="chat-provider">Provider restriction</label>
+                    <select id="chat-provider" name="provider">
+                      <option value="">Automatic routing</option>
+                    </select>
+                    <p id="provider-status" class="note">Loading routing choices…</p>
+                    <ul id="feature-status" class="feature-list"></ul>
+                    <p class="note">API keys stay on the server. Limiting a provider sends this prompt only to that provider and can spend that account’s usage. This page cannot change server settings or name a model.</p>
+                  </div>
+                  <div class="composer-box">
+                    <label class="visually-hidden" for="prompt">Message</label>
+                    <textarea id="prompt" name="prompt" rows="1" placeholder="Message RouteLLM" enterkeyhint="send"></textarea>
+                    <button id="options-toggle" class="secondary" type="button" aria-expanded="false" aria-controls="options-panel">Options</button>
+                    <button id="send" class="primary" type="submit" aria-label="Send message">Send</button>
+                  </div>
+                  <p id="form-status" class="note" role="status"></p>
+                  <p id="error" class="error" role="alert" hidden></p>
+                </form>
+              </div>
+            </div>
+
+            <aside id="chat-history-panel" class="history-drawer" hidden>
+              <div class="drawer-card">
+                <div class="drawer-head">
+                  <h2 id="history-heading">History</h2>
+                  <button id="history-close" class="secondary" type="button">Close</button>
+                </div>
+                <p class="note">Previews come from stored requests. Reuse copies a prompt into the editor and does not send it.</p>
+                <p id="history-status" class="empty">Loading stored requests…</p>
+                <ol id="chat-history"></ol>
+              </div>
+            </aside>
+          </section>
+
+          <div id="dashboard-root">
+            <p id="demo-banner" class="note" hidden></p>
+            <form id="filters" class="filters">
+              <div>
+                <label for="from">From <span>UTC, inclusive</span></label>
+                <input id="from" name="from" type="date" />
+              </div>
+              <div>
+                <label for="to">To <span>UTC, inclusive</span></label>
+                <input id="to" name="to" type="date" />
+              </div>
+              <div class="filter-full">
+                <label for="model">Initial model</label>
+                <input id="model" name="model" type="text" maxlength="128" placeholder="Any model" />
+              </div>
+              <div class="filter-full">
+                <label for="provider">Initial provider</label>
+                <select id="provider" name="provider">
+                  <option value="">Any</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </div>
+              <div class="filter-full">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                  <option value="">Any</option>
+                  <option value="succeeded">Succeeded</option>
+                  <option value="failed">Failed</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+              <div class="filter-actions">
+                <button id="apply" class="primary" type="submit">Apply</button>
+                <button id="reset-filters" class="secondary" type="button">Reset</button>
+              </div>
+            </form>
+            <p id="filter-scope" class="note"></p>
+
+            <p id="dashboard-status" role="status">Loading dashboard…</p>
+            <button id="retry" class="secondary" type="button" hidden>Retry</button>
+            <p id="empty" class="empty" hidden>No stored requests match these filters.</p>
+
+            <section id="provider-availability" class="surface">
+              <h2 class="section-label">Routing availability</h2>
+              <p class="note">Enabled means the server catalog can route to that model. This is not a live provider health check, and it is not shown on historical rows.</p>
+              <ul id="availability" class="availability"></ul>
+            </section>
+
+            <div id="content" hidden>
+              <section data-page="overview" aria-labelledby="overview-heading">
+                <h2 id="overview-heading" class="visually-hidden">Overview</h2>
+                <div id="cards" class="cards"></div>
+                <h3 class="section-label">More counts</h3>
+                <div id="secondary-metrics" class="secondary"></div>
+                <div class="charts">
+                  <figure>
+                    <figcaption>Requests per UTC day. Exact daily numbers are on Costs &amp; Usage.</figcaption>
+                    <div class="chart-frame">
+                      <svg id="volume-chart" role="img" aria-label="Request volume by day"></svg>
+                    </div>
+                    <p id="volume-tip" class="chart-tip" role="status"></p>
+                  </figure>
+                  <figure>
+                    <figcaption>Recorded USD by UTC day. Unknown costs are omitted, not drawn as zero.</figcaption>
+                    <div class="chart-frame">
+                      <svg id="cost-chart" role="img" aria-label="Recorded cost by day"></svg>
+                    </div>
+                    <p id="cost-tip" class="chart-tip" role="status"></p>
+                  </figure>
+                </div>
+                <div class="section-head">
+                  <h3>Recent requests</h3>
+                  <a href="/requests" data-nav="requests">View all requests</a>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <caption class="visually-hidden">Five newest stored requests in the current filters</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Created (UTC)</th>
+                        <th scope="col">Prompt preview</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Final model</th>
+                        <th scope="col">Cost</th>
+                        <th scope="col">Latency</th>
+                      </tr>
+                    </thead>
+                    <tbody id="recent"></tbody>
+                  </table>
+                </div>
+                <details>
+                  <summary>How these numbers are counted</summary>
+                  <ul id="notes"></ul>
+                </details>
+              </section>
+
+              <section data-page="requests" aria-labelledby="requests-heading">
+                <div class="section-head">
+                  <h2 id="requests-heading" class="visually-hidden">Requests</h2>
+                  <p id="page-label" class="note"></p>
+                </div>
+                <p class="note">Sorted newest first. The history API does not support other sort orders.</p>
+                <div class="table-wrap">
+                  <table>
+                    <caption class="visually-hidden">Stored chat requests. Open a row for the full prompt and routing detail.</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Created (UTC)</th>
+                        <th scope="col">Prompt preview</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Final model</th>
+                        <th scope="col">Cost</th>
+                        <th scope="col">Latency</th>
+                      </tr>
+                    </thead>
+                    <tbody id="history"></tbody>
+                  </table>
+                </div>
+                <div class="pager">
+                  <button id="prev" class="secondary" type="button">Previous</button>
+                  <button id="next" class="secondary" type="button">Next</button>
+                </div>
+              </section>
+
+              <section data-page="costs" aria-labelledby="costs-heading">
+                <h2 id="costs-heading" class="visually-hidden">Costs and usage</h2>
+                <div id="cost-summary" class="cards"></div>
+                <h3 class="section-label">Daily recorded cost</h3>
+                <div class="table-wrap">
+                  <table>
+                    <caption>Daily request and cost totals. Unknown amounts stay unknown.</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Day (UTC)</th>
+                        <th scope="col" class="num">Requests</th>
+                        <th scope="col" class="num">Complete USD</th>
+                        <th scope="col" class="num">Estimated USD</th>
+                        <th scope="col" class="num">Unknown cost rows</th>
+                      </tr>
+                    </thead>
+                    <tbody id="days"></tbody>
+                  </table>
+                </div>
+                <h3 class="section-label">Judge calls</h3>
+                <p class="note">Judge cost is the recorded judge component. It is not added again on top of the request total.</p>
+                <div class="table-wrap">
+                  <table>
+                    <caption>Judge calls for the same request filters.</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Judge model</th>
+                        <th scope="col" class="num">Evaluations</th>
+                        <th scope="col" class="num">Complete USD</th>
+                        <th scope="col" class="num">Estimated USD</th>
+                        <th scope="col" class="num">Unknown costs</th>
+                      </tr>
+                    </thead>
+                    <tbody id="judges"></tbody>
+                  </table>
+                </div>
+                <details>
+                  <summary>Cost accounting</summary>
+                  <ul id="cost-notes"></ul>
+                </details>
+              </section>
+
+              <section data-page="providers" aria-labelledby="providers-heading">
+                <h2 id="providers-heading" class="visually-hidden">Providers and models</h2>
+                <h3 class="section-label">Attempt breakdown</h3>
+                <div class="table-wrap">
+                  <table>
+                    <caption>Generation attempts attributed to the provider and model that ran them.</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Provider</th>
+                        <th scope="col">Model</th>
+                        <th scope="col" class="num">Attempts</th>
+                        <th scope="col" class="num">Requests</th>
+                        <th scope="col" class="num">Failed attempts</th>
+                        <th scope="col" class="num">Complete USD</th>
+                        <th scope="col" class="num">Estimated USD</th>
+                        <th scope="col" class="num">Unknown costs</th>
+                        <th scope="col" class="num">Attempt p50 (ms)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="models"></tbody>
+                  </table>
+                </div>
+                <details>
+                  <summary>How attempt rows are counted</summary>
+                  <ul id="breakdown-notes" class="note-list"></ul>
+                </details>
+              </section>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <section id="detail" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="detail-heading">
+      <div class="drawer-card">
+        <div class="drawer-head">
+          <h2 id="detail-heading">Request detail</h2>
+          <button id="detail-close" class="secondary" type="button">Close</button>
+        </div>
+        <p id="detail-status" role="status"></p>
+        <button id="detail-retry" class="secondary" type="button" hidden>Retry</button>
+        <div id="detail-body"></div>
+      </div>
+    </section>
+
+    <script type="module" src="/static/shell.js?v=1"></script>
+    <script type="module" src="/static/app.js?v=10"></script>
+    <script type="module" src="/static/dashboard.js?v=10"></script>
   </body>
 </html>

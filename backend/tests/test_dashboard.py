@@ -21,6 +21,7 @@ from app.main import create_app
 def test_dashboard_page_is_served(client: TestClient) -> None:
     page = client.get("/dashboard")
     script = client.get("/static/dashboard.js")
+    shell = client.get("/static/shell.js")
     home = client.get("/")
 
     assert page.status_code == 200
@@ -37,8 +38,13 @@ def test_dashboard_page_is_served(client: TestClient) -> None:
     assert "insertAdjacentHTML" not in script.text
     assert "document.write" not in script.text
     assert 'get("demo")' in script.text
+    assert shell.status_code == 200
+    assert "innerHTML" not in shell.text
     assert 'id="chat-form"' in home.text
-    assert 'href="/dashboard"' in home.text
+    for path in ("/overview", "/requests", "/costs", "/providers"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert f'href="{path}"' in home.text
 
 
 def test_dashboard_without_a_database_is_unavailable(client: TestClient) -> None:

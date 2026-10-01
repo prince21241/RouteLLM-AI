@@ -297,7 +297,7 @@ def test_chat_page_keeps_untrusted_output_out_of_html_strings() -> None:
     assert page.status_code == 200
     assert 'id="chat-form"' in page.text
     assert 'id="use-prompt"' in page.text
-    assert 'href="/dashboard"' in page.text
+    assert 'href="/overview"' in page.text
     assert "innerHTML" not in script.text
     assert "insertAdjacentHTML" not in script.text
     assert "document.write" not in script.text

@@ -23,6 +23,16 @@ export function renderMarkdown(container, source) {
       container.append(heading);
       continue;
     }
+    if (block.type === "quote") {
+      const quote = document.createElement("blockquote");
+      appendInlines(quote, block.inlines);
+      container.append(quote);
+      continue;
+    }
+    if (block.type === "rule") {
+      container.append(document.createElement("hr"));
+      continue;
+    }
     if (block.type === "list") {
       const list = document.createElement(block.ordered ? "ol" : "ul");
       for (const item of block.items) {
@@ -43,6 +53,8 @@ function appendInlines(parent, tokens) {
   for (const token of tokens) {
     if (token.type === "text") {
       parent.append(document.createTextNode(token.text));
+    } else if (token.type === "break") {
+      parent.append(document.createElement("br"));
     } else if (token.type === "code") {
       const code = document.createElement("code");
       code.textContent = token.text;

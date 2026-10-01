@@ -371,15 +371,17 @@ python -m app.demo_fallback
 
 ## Chat page
 
-Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/). The dashboard links back to this page. There is no login. Use it only on your machine.
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/). The same page shell links to Overview, Requests, Costs & Usage, and Providers & Models. There is no login. Use it only on your machine.
 
 Each send is one independent request. The page does not resend earlier messages, and the model is not given the conversation. The character limit covers the user prompt and system prompt together. It is not a model context window. `GET /api/v1/chat/options` returns that limit, the catalog models, and whether each model is enabled. It does not return credentials.
 
 Routing stays automatic. The provider menu is filled from that options response. A provider with no enabled model cannot be selected. The API does not accept a model id on a chat request, so the page does not offer one. Quality checks, escalation, and fallback are server settings. The page shows whether they are on. It does not add switches for them. A provider limit still applies to fallback and escalation, because the chat service already restricts the registry to that provider.
 
-The answer is rendered as text, with fenced code blocks kept separate. Request details stay collapsed until opened. A missing cost, token count, or latency stays unknown. A recorded zero stays zero. Savings stay labeled as a same-token-volume estimate. If saving the request fails, the answer remains on the page and the details say it was not saved. A stored request links to `/dashboard#request={id}`.
+Answers are rendered as readable Markdown: headings, lists, quotes, rules, hard line breaks, and fenced code stay structured. Untrusted text is inserted as text, not HTML. Earlier prompts stay on the page in an in-memory thread so navigation inside the app can show them again. That display is not conversation memory. The persistent note on the page is “Each prompt is routed independently; previous messages aren’t sent.” A reload clears the thread. The page does not store full prompts in the browser.
 
-History can open a saved request or copy its prompt into the editor. Copying a prompt does not send it. Send is disabled while a request is in progress, and a failed request leaves the editor text in place. Ctrl+Enter or Cmd+Enter sends from the message field.
+Each answer has Copy and collapsed routing details. A missing cost, token count, or latency stays unknown. A recorded zero stays zero. Savings stay labeled as a same-token-volume estimate. If saving the request fails, the answer remains on the page and the details say it was not saved. A stored request links to `/dashboard#request={id}`, which opens that request on the Requests page. The page does not pretend to stream tokens; a loading indicator sits beside the pending answer until the response arrives.
+
+History stays in the chat header. Its previews come from `GET /api/v1/dashboard/requests` because `GET /api/v1/requests` does not include prompt text. Opening a row loads the stored request into the thread and does not send it. Reuse copies its prompt into the editor and does not send it. Example prompts only fill the composer. Enter sends. Shift+Enter inserts a newline. Send is disabled while a request is in progress, and a failed request leaves the editor text in place. The optional system prompt and provider restriction stay behind Options. The page cannot change server settings.
 
 The page is the same static frontend as the dashboard. There is no frontend package and no production bundle.
 
@@ -418,7 +420,9 @@ Set-Location backend
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). Sending a chat from `/` can spend money. The dashboard only reads history.
+Open [http://127.0.0.1:8000/overview](http://127.0.0.1:8000/overview). [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard) is the same Overview page, so older links keep working. Requests are at `/requests`, cost totals at `/costs`, and provider breakdowns at `/providers`. Sending a chat from `/` can spend money. These pages only read history.
+
+The header status comes from `GET /health` and `GET /ready`. Overview shows four primary figures: request count, recorded cost, error rate, and median end-to-end latency. Attempts, fallback rate, escalation rate, judge cost, the savings estimate, and attempt latency stay in a secondary group. Requests are newest first. The history API has no other sort. Timestamps are labeled UTC, and each row also shows the exact UTC timestamp. Providers & Models shows Enabled or Not enabled from `GET /api/v1/chat/options`. That is the server catalog, not a live provider health check. Historical attempt rows do not get availability badges. Filters are shared across the analytics pages. Overview shows the date range, and a note when a provider, model, or status filter set on another page is still applied.
 
 `from` is inclusive and `to` is exclusive, both in UTC. A date with no time is UTC midnight. The page treats the chosen end date as inclusive and sends the following midnight as `to`. The range cannot exceed 366 days. Filters select requests by the initial routed model, provider, and status. Attempt rows are then aggregated for those requests.
 
@@ -426,7 +430,7 @@ Request counts are logical chat requests. Generation attempts are counted separa
 
 Request latency is `end_to_end_latency_ms`. Attempt latency is the provider call. Missing samples are left out of the average and median. Complete and estimated costs are summed separately. Unknown amounts are counted and are not added as zero. Judge costs are the recorded judge component and are not added again on top of the request total. Savings stay labeled `same_token_volume`. Attempt costs are attributed to the provider and model that ran the attempt. A recorded zero, such as local Ollama, stays zero.
 
-The history table shows an 80-character prompt preview. The full prompt is only on the request detail. Prompts and answers are rendered as text.
+The Requests table shows an 80-character prompt preview, status, final model, cost, and latency. Initial route, attempts, quality, escalation, fallback, and the full prompt stay in the request detail drawer. Prompts and answers are rendered as text. Daily totals and judge costs are on Costs & Usage. Judge cost is not added again on top of the request total.
 
 `?demo=1`, `?demo=empty`, and `?demo=error` are labeled samples. They do not read the database. The normal page does.
 

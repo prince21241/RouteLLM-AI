@@ -82,6 +82,15 @@ test("markdown keeps untrusted text and separates code blocks", () => {
   assert.equal(JSON.stringify(blocks).includes("innerHTML"), false);
 });
 
+test("markdown keeps line breaks, quotes, and rules as structured text", () => {
+  const blocks = markdownBlocks("> quoted <b>\n\n---\n\nLine one\nLine two");
+  assert.equal(blocks[0].type, "quote");
+  assert.equal(blocks[0].inlines[0].text, "quoted <b>");
+  assert.equal(blocks[1].type, "rule");
+  assert.equal(blocks[2].inlines.some((token) => token.type === "break"), true);
+  assert.equal(JSON.stringify(blocks).includes("innerHTML"), false);
+});
+
 test("live details keep unknown cost, fallback, escalation, and failed persistence", () => {
   const details = liveDetails({
     request_id: "req-1",

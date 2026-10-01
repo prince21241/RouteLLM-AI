@@ -102,12 +102,13 @@ def create_app(
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
     @app.get("/")
-    def home() -> FileResponse:
-        return FileResponse(_STATIC_DIR / "index.html")
-
+    @app.get("/overview")
     @app.get("/dashboard")
-    def dashboard() -> FileResponse:
-        return FileResponse(_STATIC_DIR / "dashboard.html")
+    @app.get("/requests")
+    @app.get("/costs")
+    @app.get("/providers")
+    def ui_page() -> FileResponse:
+        return FileResponse(_STATIC_DIR / "index.html")
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:

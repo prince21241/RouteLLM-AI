@@ -136,12 +136,26 @@ export function markdownBlocks(source) {
       blocks.push({ type: "list", ordered: true, items });
       continue;
     }
+    if (/^>\s?/.test(line)) {
+      const quote = [];
+      while (index < lines.length && /^>\s?/.test(lines[index])) {
+        quote.push(lines[index].replace(/^>\s?/, ""));
+        index += 1;
+      }
+      blocks.push({ type: "quote", inlines: inlineTokens(quote.join("\n")) });
+      continue;
+    }
+    if (/^(?:---|\*\*\*|___)\s*$/.test(line)) {
+      blocks.push({ type: "rule" });
+      index += 1;
+      continue;
+    }
     const paragraph = [];
     while (index < lines.length && lines[index].trim() !== "" && !isBlockStart(lines[index])) {
       paragraph.push(lines[index]);
       index += 1;
     }
-    blocks.push({ type: "paragraph", inlines: inlineTokens(paragraph.join(" ")) });
+    blocks.push({ type: "paragraph", inlines: inlineTokens(paragraph.join("\n")) });
   }
   return blocks;
 }
@@ -343,7 +357,7 @@ function savingsText(amount, basis) {
 }
 
 function isBlockStart(line) {
-  return /^```/.test(line) || /^#{1,3}\s+/.test(line) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line);
+  return /^```/.test(line) || /^#{1,3}\s+/.test(line) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line) || /^>\s?/.test(line) || /^(?:---|\*\*\*|___)\s*$/.test(line);
 }
 
 export function inlineTokens(input) {
@@ -358,6 +372,12 @@ export function inlineTokens(input) {
     }
   };
   while (index < text.length) {
+    if (text[index] === "\n") {
+      pushText();
+      tokens.push({ type: "break" });
+      index += 1;
+      continue;
+    }
     if (text.startsWith("**", index)) {
       const end = text.indexOf("**", index + 2);
       if (end !== -1) {
