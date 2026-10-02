@@ -6,15 +6,24 @@ Local-use only. There is no application authentication. Stored prompts and answe
 
 <!-- Add a screenshot or short GIF of the chat page and dashboard here. -->
 Features
-Multi-provider clients for OpenAI (Responses API), Anthropic (Messages API), and Ollama (local or Ollama Cloud). Each client makes a single non-streaming attempt with no automatic retry.
-Complexity-based routing using a rule-based keyword and shape heuristic, with deterministic model selection and configurable tier thresholds.
-Cost tracking with a Decimal-based pricing service, per-attempt pricing snapshots, and a same-token-volume savings estimate against a premium baseline.
-Request history in PostgreSQL, written before the provider call so a failed write never triggers a model call.
-Optional quality checks and escalation that can call one stronger model after an explicit failed check.
-Optional provider fallback that can call one model on another provider after a timeout, connection failure, rate limit, or transient server error.
-Evaluation harness with a versioned dataset, offline (--mock) and paid (--execute) runners, and exact, numeric, JSON, and rubric grading.
-Experimental ML router (TF-IDF + logistic regression) with a data-collection pipeline. Disabled by default.
-Chat page and dashboard served as static files by the API, with no frontend build step.
+- Multi-provider clients for OpenAI (Responses API), Anthropic (Messages API), and Ollama (local or Ollama Cloud). Each client makes a single non-streaming attempt with no automatic retry.
+
+- Complexity-based routing using a rule-based keyword and shape heuristic, with deterministic model selection and configurable tier thresholds.
+
+  
+- Cost tracking with a Decimal-based pricing service, per-attempt pricing snapshots, and a same-token-volume savings estimate against a premium baseline.
+  
+-  Request history in PostgreSQL, written before the provider call so a failed write never triggers a model call.
+  
+-  Optional quality checks and escalation that can call one stronger model after an explicit failed check.
+  
+- Optional provider fallback that can call one model on another provider after a timeout, connection failure, rate limit, or transient server error.
+  
+- Evaluation harness with a versioned dataset, offline (--mock) and paid (--execute) runners, and exact, numeric, JSON, and rubric grading.
+  
+- Experimental ML router (TF-IDF + logistic regression) with a data-collection pipeline. Disabled by default.
+  
+- Chat page and dashboard served as static files by the API, with no frontend build step.
 
 ## Screenshots
 
