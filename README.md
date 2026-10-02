@@ -14,6 +14,22 @@ The API still starts and serves `/health` when provider credentials and `DATABAS
 
 All commands below use `backend` as the working directory.
 
+## Screenshots
+
+These are the local pages, from one machine’s stored chat history. They show the interface. They are not a benchmark, and a reload of Chat clears the on-screen thread.
+
+![Chat, with example prompts that only fill the composer](docs/screenshots/chat.png)
+
+![A stored answer, with code shown in labeled blocks](docs/screenshots/chat-answer.png)
+
+![Overview of stored requests, recorded cost, error rate, and latency](docs/screenshots/overview.png)
+
+![Request history, newest first](docs/screenshots/requests.png)
+
+![Recorded cost and daily totals](docs/screenshots/costs.png)
+
+![Enabled models and the attempt breakdown](docs/screenshots/providers.png)
+
 ## Requirements
 
 - Windows PowerShell
