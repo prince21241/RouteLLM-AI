@@ -1,18 +1,20 @@
 # RouteLLM AI
 
-Phase 1 is the FastAPI backend: configuration, shared models, the provider interface, and an in-memory model catalog.
+A FastAPI service that routes each prompt to an appropriate LLM based on estimated complexity, records every request in PostgreSQL, and tracks cost and estimated savings against a premium baseline model. It includes a browser chat client and a local observability dashboard.
 
-Phase 2 adds non-streaming text clients for OpenAI, Anthropic, and Ollama. Each client implements `LLMProvider` and returns `LLMResponse`. There is no automatic retry.
+Local-use only. There is no application authentication. Stored prompts and answers are visible to anyone who can reach the API. Keep it bound to 127.0.0.1.
 
-Phase 3 adds a rule-based complexity heuristic, deterministic model selection, and `POST /api/v1/chat`.
-
-Phase 4 adds a pricing service, PostgreSQL persistence, request history, and a same-token-volume savings estimate.
-
-Phase 5 adds a versioned evaluation dataset, an offline or paid baseline runner, and optional quality checks. Phase 6 adds optional provider fallback. Phase 7 adds a local observability dashboard over stored chat history. The browser client is served by the API at `/`, and the dashboard is at `/dashboard`. Quality checking, escalation, and fallback are off by default, so a normal chat still makes one provider call. When quality checking and escalation are enabled, a failed check may call one stronger model. When fallback is enabled, a timeout, connection failure, rate limit, or transient server error may call one configured model on another provider. There is no provider retry. ML routing is a later phase.
-
-The API still starts and serves `/health` when provider credentials and `DATABASE_URL` are missing. A provider reports missing configuration only when that provider is used. If the first generation fails, the request stops. The router does not call another provider unless escalation is enabled and the initial answer fails a quality check. `/health` does not touch the database. `/ready` does.
-
-All commands below use `backend` as the working directory.
+<!-- Add a screenshot or short GIF of the chat page and dashboard here. -->
+Features
+Multi-provider clients for OpenAI (Responses API), Anthropic (Messages API), and Ollama (local or Ollama Cloud). Each client makes a single non-streaming attempt with no automatic retry.
+Complexity-based routing using a rule-based keyword and shape heuristic, with deterministic model selection and configurable tier thresholds.
+Cost tracking with a Decimal-based pricing service, per-attempt pricing snapshots, and a same-token-volume savings estimate against a premium baseline.
+Request history in PostgreSQL, written before the provider call so a failed write never triggers a model call.
+Optional quality checks and escalation that can call one stronger model after an explicit failed check.
+Optional provider fallback that can call one model on another provider after a timeout, connection failure, rate limit, or transient server error.
+Evaluation harness with a versioned dataset, offline (--mock) and paid (--execute) runners, and exact, numeric, JSON, and rubric grading.
+Experimental ML router (TF-IDF + logistic regression) with a data-collection pipeline. Disabled by default.
+Chat page and dashboard served as static files by the API, with no frontend build step.
 
 ## Screenshots
 
