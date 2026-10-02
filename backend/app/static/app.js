@@ -8,8 +8,8 @@ import {
   reuseDraft,
   storedDetails,
   submissionState,
-} from "./chat_view.mjs";
-import { renderMarkdown } from "./markdown_dom.mjs";
+} from "./chat_view.mjs?v=3";
+import { renderMarkdown } from "./markdown_dom.mjs?v=3";
 
 const API_BASE = window.ROUTELLM_API_BASE || "";
 const EXAMPLES = document.querySelector("#examples");
@@ -135,6 +135,28 @@ thread.addEventListener("scroll", () => {
     return;
   }
   following = thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 80;
+});
+
+thread.addEventListener("click", (event) => {
+  const summary = event.target instanceof Element ? event.target.closest("summary") : null;
+  const details = summary ? summary.parentElement : null;
+  if (!(details instanceof HTMLDetailsElement) || !details.classList.contains("routing")) {
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    if (!details.open) {
+      return;
+    }
+    const threadBox = thread.getBoundingClientRect();
+    const box = details.getBoundingClientRect();
+    const room = threadBox.height - 16;
+    const delta = box.height > room ? box.top - threadBox.top - 8 : box.bottom - (threadBox.bottom - 8);
+    if (delta > 0) {
+      ignoreScroll = true;
+      thread.scrollTop += delta;
+      ignoreScroll = false;
+    }
+  });
 });
 
 async function sendPrompt() {
@@ -484,7 +506,17 @@ function resizePrompt() {
   promptField.style.overflowY = promptField.scrollHeight > max ? "auto" : "hidden";
 }
 
+function syncChatScrollbar() {
+  if (!thread || document.body.dataset.route !== "chat") {
+    document.documentElement.style.removeProperty("--chat-scrollbar");
+    return;
+  }
+  const width = Math.max(0, thread.offsetWidth - thread.clientWidth);
+  document.documentElement.style.setProperty("--chat-scrollbar", `${width}px`);
+}
+
 function fitChatToViewport() {
+  syncChatScrollbar();
   if (!pageChat || document.body.dataset.route !== "chat") {
     if (pageChat) {
       pageChat.style.height = "";
@@ -496,8 +528,14 @@ function fitChatToViewport() {
   if (!viewport || !main) {
     return;
   }
+  const layoutBottom = window.innerHeight;
   const visibleBottom = viewport.offsetTop + viewport.height;
-  const height = visibleBottom - main.getBoundingClientRect().top;
+  const keyboardOpen = viewport.offsetTop > 0 || layoutBottom - visibleBottom > 40;
+  if (!keyboardOpen) {
+    pageChat.style.height = "";
+    return;
+  }
+  const height = Math.min(main.clientHeight, visibleBottom - main.getBoundingClientRect().top);
   pageChat.style.height = `${Math.max(180, height)}px`;
 }
 

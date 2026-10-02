@@ -105,7 +105,33 @@ export function markdownBlocks(source) {
       if (index < lines.length) {
         index += 1;
       }
-      blocks.push({ type: "code", language: fence[1], text: code.join("\n") });
+      const text = code.join("\n");
+      blocks.push({ type: "code", language: fence[1] || inferLanguage(text), text });
+      continue;
+    }
+    if (isCodeStart(line)) {
+      const code = [];
+      while (index < lines.length) {
+        if (lines[index].trim() === "") {
+          let look = index + 1;
+          while (look < lines.length && lines[look].trim() === "") {
+            look += 1;
+          }
+          if (look < lines.length && isCodeContinuation(lines[look])) {
+            code.push(lines[index]);
+            index += 1;
+            continue;
+          }
+          break;
+        }
+        if (!isCodeContinuation(lines[index])) {
+          break;
+        }
+        code.push(lines[index]);
+        index += 1;
+      }
+      const text = code.join("\n").replace(/\n+$/, "");
+      blocks.push({ type: "code", language: inferLanguage(text), text });
       continue;
     }
     if (line.trim() === "") {
@@ -356,8 +382,44 @@ function savingsText(amount, basis) {
   return `${money} (${label} estimate)`;
 }
 
+function isCodeStart(line) {
+  const text = line.trim();
+  if (!text || line.startsWith(" ") || line.startsWith("\t")) {
+    return false;
+  }
+  return /^(?:def |class |async def |import |from |function |const |let |var |fn |func |public |private |protected |#include\b|package )/.test(text)
+    || /^(?:print|console)\s*[\.(]/.test(text)
+    || /^(?:if |elif |for |while |try|with |switch )\S.*:\s*$/.test(text);
+}
+
+function isCodeContinuation(line) {
+  if (line.trim() === "") {
+    return false;
+  }
+  if (/^\s+\S/.test(line)) {
+    return true;
+  }
+  return isCodeStart(line) || /^(?:else|elif |except |finally|catch |case |default)\b.*:\s*$/.test(line.trim()) || /^(?:return |pass|break|continue|yield )/.test(line.trim());
+}
+
+function inferLanguage(text) {
+  if (/^\s*(?:def |class |import |from |elif |print\()/m.test(text)) {
+    return "python";
+  }
+  if (/^\s*(?:function |const |let |var |console\.)/m.test(text)) {
+    return "javascript";
+  }
+  if (/^\s*#include\b/m.test(text)) {
+    return "cpp";
+  }
+  if (/^\s*(?:SELECT |INSERT |CREATE )/m.test(text)) {
+    return "sql";
+  }
+  return "";
+}
+
 function isBlockStart(line) {
-  return /^```/.test(line) || /^#{1,3}\s+/.test(line) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line) || /^>\s?/.test(line) || /^(?:---|\*\*\*|___)\s*$/.test(line);
+  return /^```/.test(line) || /^#{1,3}\s+/.test(line) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line) || /^>\s?/.test(line) || /^(?:---|\*\*\*|___)\s*$/.test(line) || isCodeStart(line);
 }
 
 export function inlineTokens(input) {

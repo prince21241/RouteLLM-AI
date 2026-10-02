@@ -388,12 +388,54 @@ button.linkish {
   white-space: pre-wrap;
 }
 
-.markdown pre {
+.code-block {
+  margin: 0 0 0.85rem;
+  overflow: hidden;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.code-block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.55rem 0.35rem 0.85rem;
+  border-bottom: 1px solid #d8dee8;
+  background: #eef2f6;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.code-copy {
+  min-height: 0;
+  padding: 0.15rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.code-copy:hover {
+  background: #e2e8f0;
+  color: var(--ink);
+}
+
+.markdown .code-block pre {
+  margin: 0;
+  padding: 0.85rem 1rem 1rem;
   overflow-x: auto;
-  max-width: 100%;
-  padding: 0.75rem;
-  border-radius: 8px;
-  background: var(--paper);
+  border-radius: 0;
+  background: transparent;
+}
+
+.code-block code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre;
 }
 
 .markdown code {
@@ -495,7 +537,7 @@ body[data-route="providers"] #content [data-page="providers"] {
 }
 
 .card,
-.secondary div {
+#secondary-metrics div {
   min-width: 0;
   padding: 0.85rem 0.9rem;
   border: 1px solid var(--line);
@@ -504,14 +546,14 @@ body[data-route="providers"] #content [data-page="providers"] {
 }
 
 .card span,
-.secondary dt {
+#secondary-metrics dt {
   display: block;
   color: var(--muted);
   font-size: 0.8rem;
 }
 
 .card strong,
-.secondary dd {
+#secondary-metrics dd {
   display: block;
   margin: 0.2rem 0;
   font-size: 1.55rem;
@@ -521,19 +563,19 @@ body[data-route="providers"] #content [data-page="providers"] {
 }
 
 .card .hint,
-.secondary .hint {
+#secondary-metrics .hint {
   font-size: 0.8rem;
 }
 
-.secondary {
+#secondary-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   margin: 0.75rem 0 1rem;
 }
 
-.secondary dd,
-.secondary .card strong {
+#secondary-metrics dd,
+#secondary-metrics .card strong {
   font-size: 1.15rem;
 }
 
@@ -769,17 +811,26 @@ body[data-route="chat"] #page-chat {
   display: flex;
   flex: 1;
   flex-direction: column;
-  width: min(800px, 100%);
+  width: 100%;
   min-height: 0;
-  margin: 0 auto;
-  padding: 0 1rem;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-toolbar,
+.composer-dock {
+  width: min(800px, calc(100% - var(--chat-scrollbar, 0px)));
+  margin-left: auto;
+  margin-right: auto;
+  transform: translateX(calc(var(--chat-scrollbar, 0px) / -2));
 }
 
 .chat-toolbar {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.7rem 0 0.35rem;
+  padding: 0.7rem 1rem 0.35rem;
+  box-sizing: border-box;
 }
 
 #independence {
@@ -791,13 +842,35 @@ body[data-route="chat"] #page-chat {
 .thread {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 0.35rem 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+
+.thread::-webkit-scrollbar {
+  width: 8px;
+}
+
+.thread::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thread::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #94a3b8;
 }
 
 .chat-empty {
   display: flex;
-  min-height: 100%;
+  flex: 1;
+  width: min(800px, 100%);
+  min-height: 0;
+  margin: 0 auto;
+  padding: 0 1rem;
+  box-sizing: border-box;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -833,9 +906,15 @@ button.example {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  margin: 0;
-  padding: 0.4rem 0 0.75rem;
+  width: min(800px, 100%);
+  margin: 0 auto;
+  padding: 0 1rem;
+  box-sizing: border-box;
   list-style: none;
+}
+
+.messages:not(:empty) {
+  padding: 0.5rem 1rem 1rem;
 }
 
 .message {
@@ -916,24 +995,58 @@ button.example {
 }
 
 .routing {
-  margin-top: 0.15rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid var(--line);
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.75rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
 }
 
 .routing summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.45rem 0;
+  background: #fff;
   cursor: pointer;
   color: var(--muted);
 }
 
+.routing[open] {
+  max-height: min(22rem, 52vh);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+
+.routing[open]::-webkit-scrollbar {
+  width: 8px;
+}
+
+.routing[open]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.routing .facts {
+  margin-top: 0.15rem;
+}
+
+.routing .table-wrap {
+  max-width: 100%;
+}
+
 .composer-dock {
   flex: none;
-  padding: 0.25rem 0 calc(0.85rem + env(safe-area-inset-bottom));
+  padding: 0.25rem 1rem calc(0.85rem + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .composer-box {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.45rem 0.4rem 0.95rem;
   border: 1px solid var(--line);
@@ -968,6 +1081,7 @@ button.example {
 .composer-box #send,
 .composer-box #options-toggle {
   flex: none;
+  margin: 0;
   border-radius: 999px;
   min-height: 2.4rem;
 }
@@ -1080,7 +1194,7 @@ button.example {
   }
 
   .cards,
-  .secondary,
+  #secondary-metrics,
   .charts {
     grid-template-columns: 1fr;
   }
@@ -1093,7 +1207,13 @@ button.example {
     height: 260px;
   }
 
-  .chat-column {
+  .chat-toolbar,
+  .composer-dock,
+  .chat-empty {
+    padding-inline: 0.75rem;
+  }
+
+  .messages:not(:empty) {
     padding-inline: 0.75rem;
   }
 

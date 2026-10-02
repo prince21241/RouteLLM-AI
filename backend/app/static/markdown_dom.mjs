@@ -1,20 +1,10 @@
-import { markdownBlocks } from "./chat_view.mjs";
+import { markdownBlocks } from "./chat_view.mjs?v=3";
 
 export function renderMarkdown(container, source) {
   container.replaceChildren();
   for (const block of markdownBlocks(source)) {
     if (block.type === "code") {
-      const pre = document.createElement("pre");
-      const code = document.createElement("code");
-      code.textContent = block.text;
-      if (block.language) {
-        const label = document.createElement("span");
-        label.className = "code-label";
-        label.textContent = block.language;
-        pre.append(label);
-      }
-      pre.append(code);
-      container.append(pre);
+      container.append(renderCodeBlock(block));
       continue;
     }
     if (block.type === "heading") {
@@ -47,6 +37,61 @@ export function renderMarkdown(container, source) {
     appendInlines(paragraph, block.inlines);
     container.append(paragraph);
   }
+}
+
+function renderCodeBlock(block) {
+  const wrap = document.createElement("div");
+  wrap.className = "code-block";
+  const bar = document.createElement("div");
+  bar.className = "code-block-bar";
+  const label = document.createElement("span");
+  label.textContent = block.language || "code";
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "code-copy";
+  copy.textContent = "Copy";
+  copy.addEventListener("click", () => {
+    void copyCode(copy, block.text);
+  });
+  bar.append(label, copy);
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = block.text;
+  pre.append(code);
+  wrap.append(bar, pre);
+  return wrap;
+}
+
+async function copyCode(button, text) {
+  let copied = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
+  } catch (error) {
+    copied = false;
+  }
+  if (!copied) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.top = "0";
+    area.style.left = "0";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.focus();
+    area.select();
+    copied = document.execCommand("copy");
+    area.remove();
+  }
+  button.textContent = copied ? "Copied" : "Copy";
+  window.setTimeout(() => {
+    if (button.isConnected) {
+      button.textContent = "Copy";
+    }
+  }, 1500);
 }
 
 function appendInlines(parent, tokens) {

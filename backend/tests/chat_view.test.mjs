@@ -82,6 +82,20 @@ test("markdown keeps untrusted text and separates code blocks", () => {
   assert.equal(JSON.stringify(blocks).includes("innerHTML"), false);
 });
 
+test("plain code answers become labeled code blocks and prose stays text", () => {
+  const blocks = markdownBlocks("Option 1: using max\ndef larger(a, b):\n    return max(a, b)\n\nIf you want more, ask.\n\nprint(larger(1, 2))");
+  assert.equal(blocks[0].type, "paragraph");
+  assert.match(blocks[0].inlines[0].text, /Option 1/);
+  assert.equal(blocks[1].type, "code");
+  assert.equal(blocks[1].language, "python");
+  assert.match(blocks[1].text, /def larger/);
+  assert.match(blocks[1].text, /    return max/);
+  assert.equal(blocks[2].type, "paragraph");
+  assert.match(blocks[2].inlines[0].text, /If you want/);
+  assert.equal(blocks[3].type, "code");
+  assert.equal(blocks[3].text, "print(larger(1, 2))");
+});
+
 test("markdown keeps line breaks, quotes, and rules as structured text", () => {
   const blocks = markdownBlocks("> quoted <b>\n\n---\n\nLine one\nLine two");
   assert.equal(blocks[0].type, "quote");
